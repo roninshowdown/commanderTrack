@@ -1,0 +1,157 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: #0f0f1a;
+  color: #f5f3ff;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+/* ── Header ── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  background: rgba(22, 33, 62, 0.9);
+  border-bottom: 1px solid #312e81;
+  flex-shrink: 0;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.app-title {
+  font-size: clamp(1rem, 3vw, 1.5rem);
+  font-weight: 900;
+  color: #c4b5fd;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.player-select {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.control-label {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-right: 0.2rem;
+}
+
+.select-btn {
+  background: #1e1b4b;
+  border: 1px solid #4338ca;
+  color: #a5b4fc;
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.select-btn:hover {
+  background: #312e81;
+  border-color: #818cf8;
+  color: #e0e7ff;
+}
+
+.select-btn.active {
+  background: #4f46e5;
+  border-color: #818cf8;
+  color: #ffffff;
+}
+
+.reset-all-btn {
+  background: #1e1b4b;
+  border: 1px solid #6b7280;
+  color: #9ca3af;
+  border-radius: 8px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.reset-all-btn:hover {
+  border-color: #c4b5fd;
+  color: #c4b5fd;
+}
+
+/* ── Player Grid ── */
+.player-grid {
+  flex: 1;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  min-height: 0;
+}
+
+/* 2 players: side by side */
+.player-grid.players-2 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
+}
+
+/* 3 players: 2 on top, 1 centred below */
+.player-grid.players-3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.player-grid.players-3 > *:nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+/* 4 players: 2×2 */
+.player-grid.players-4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+/* 5 players: 3 on top, 2 on bottom */
+.player-grid.players-5 {
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.player-grid.players-5 > *:nth-child(4) {
+  grid-column: 1 / 2;
+}
+
+.player-grid.players-5 > *:nth-child(5) {
+  grid-column: 3 / 4;
+}
+
+/* ── Responsive tweaks ── */
+@media (max-width: 500px) {
+  .player-grid.players-3,
+  .player-grid.players-4,
+  .player-grid.players-5 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .player-grid.players-5 > *:nth-child(4),
+  .player-grid.players-5 > *:nth-child(5) {
+    grid-column: auto;
+  }
+}
