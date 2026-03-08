@@ -3,6 +3,94 @@
 # Overview
 This is a Magic the Gathering Life Tracker app which also tracks Timer.
 
+## Getting Started
+
+### Prerequisites
+- Node.js 18+ (recommended: 20+)
+- *(Optional)* A Firebase project with Firestore and Google Auth enabled
+
+### Installation
+```bash
+npm install
+```
+
+### Configuration
+The app works **out of the box in Local Dev Mode** — no Firebase required.
+Data is stored in the browser's `localStorage`.
+
+To enable Firebase (cloud persistence + Google sign-in):
+1. Copy `.env.example` to `.env`
+2. Replace the placeholder values with your Firebase project credentials
+
+> When `VITE_FIREBASE_API_KEY` is missing or starts with `your-`, the app
+> auto-detects this and runs in **Local Dev Mode** (localStorage + bypass auth).
+
+### Development
+```bash
+npm run dev
+```
+
+### Build
+```bash
+npm run build
+npm run preview  # preview the production build
+```
+
+---
+
+## Project Summary
+
+### Tech Stack
+- **SvelteKit 2** + **Svelte 5** (runes) + **TypeScript**
+- **Firebase** — Authentication (Google sign-in) + Firestore (players, decks, games, logs)
+- **Scryfall API** — Commander card image & color identity lookup with autocomplete
+- **PWA** — Service worker for offline caching, web app manifest for installability
+
+### Architecture
+
+```
+src/
+├── lib/
+│   ├── firebase/          # Firebase init, auth store, typed Firestore CRUD
+│   ├── models/types.ts    # All TypeScript interfaces (Player, Deck, GameState, TimerConfig, LogEntry, etc.)
+│   ├── services/
+│   │   ├── scryfall.ts    # Fuzzy card search + autocomplete via Scryfall API
+│   │   └── timer-engine.ts# Pure-logic timer: Variant A & B, tick, turn advance, round scaling
+│   ├── stores/
+│   │   └── gameStore.ts   # Central reactive state: game, life, commander damage, log entries
+│   ├── components/
+│   │   ├── ui/            # Button, Modal, Toast (generic, reusable)
+│   │   ├── admin/         # PlayerForm, DeckForm (with Scryfall integration)
+│   │   └── game/          # PlayerTile (life ±1 / ±10 long-press), TimerDisplay
+│   └── utils/             # Time formatting, uid generation, audio feedback
+├── routes/
+│   ├── +layout.svelte     # App shell with iOS-style bottom tab navigation
+│   ├── +page.svelte       # Home — auth status, quick-action cards
+│   ├── admin/             # Admin hub → players CRUD, decks CRUD
+│   ├── setup/             # Game setup wizard (players, decks, life, timer variant & config)
+│   ├── game/              # Main game board: player tiles grid, timer, controls
+│   ├── log/               # Real-time game log table
+│   └── rank/              # Player & deck rankings dashboard
+├── app.css                # Dark-themed design system (CSS custom properties)
+├── service-worker.ts      # Offline-first caching strategy
+└── app.html               # PWA manifest & viewport meta
+```
+
+### Implemented Features
+| Area | What's included |
+|---|---|
+| **Admin** | Full CRUD for players and decks. Scryfall auto-fetches commander image and color identity on deck creation. |
+| **Game Setup** | Choose 2–6 players, assign decks, set starting life (default 40), pick timer variant (A or B) with configurable parameters. |
+| **Timer Engine** | Variant A — shared start time then per-player pool time. Variant B — player time + reaction time + pool fallback with per-round scaling. Only one timer runs at a time. |
+| **Life Tracking** | Tap ±1, long-press ±10. Commander damage mode (source → target, 21+ = death). Automatic death at 0 life. |
+| **Game Board UI** | Responsive tile grid, commander background images, green active-player glow, red ticking indicator, pulsing critical warning (≤10 s), start/pause/next-turn/random-opponent controls. |
+| **Game Log** | Every life and commander-damage change logged with player name, signed value, and timestamp in a sortable table. |
+| **Rankings** | Player and deck stats — games played, won, lost, win rate — with sortable tabs. |
+| **PWA** | Service worker, manifest, installable as standalone app, offline asset caching. |
+| **Audio** | Distinct tones for life gain, life loss, critical timer warning, and turn advance. |
+
+---
+
 ## Technical Requirements
 - Built with SvelteKit and TypeScript
 - Progressive Web App capabilities (offline support, installability, responsive UI)

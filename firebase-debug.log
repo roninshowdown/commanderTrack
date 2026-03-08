@@ -1,0 +1,25 @@
+[debug] [2026-03-08T22:54:03.694Z] ----------------------------------------------------------------------
+[debug] [2026-03-08T22:54:03.695Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\mirco\AppData\Local\npm-cache\_npx\e67942ba90d3ff08\node_modules\firebase-tools\lib\bin\firebase.js auth:import --project commander-track
+[debug] [2026-03-08T22:54:03.695Z] CLI Version:   13.29.1
+[debug] [2026-03-08T22:54:03.696Z] Platform:      win32
+[debug] [2026-03-08T22:54:03.696Z] Node Version:  v18.18.0
+[debug] [2026-03-08T22:54:03.696Z] Time:          Sun Mar 08 2026 23:54:03 GMT+0100 (Mitteleuropäische Normalzeit)
+[debug] [2026-03-08T22:54:03.697Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-08T22:54:03.748Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-08T22:54:03.749Z] > authorizing via signed-in user (mircoroth97@web.de)
+[debug] [2026-03-08T22:54:03.749Z] [iam] checking project commander-track for permissions ["firebase.projects.get","firebaseauth.users.create","firebaseauth.users.update"]
+[debug] [2026-03-08T22:54:03.750Z] Checked if tokens are valid: true, expires at: 1773013609047
+[debug] [2026-03-08T22:54:03.750Z] Checked if tokens are valid: true, expires at: 1773013609047
+[debug] [2026-03-08T22:54:03.751Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/commander-track:testIamPermissions [none]
+[debug] [2026-03-08T22:54:03.751Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/commander-track:testIamPermissions x-goog-quota-user=projects/commander-track
+[debug] [2026-03-08T22:54:03.751Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/commander-track:testIamPermissions {"permissions":["firebase.projects.get","firebaseauth.users.create","firebaseauth.users.update"]}
+[debug] [2026-03-08T22:54:03.956Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/commander-track:testIamPermissions 200
+[debug] [2026-03-08T22:54:03.957Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/commander-track:testIamPermissions {"permissions":["firebase.projects.get","firebaseauth.users.create","firebaseauth.users.update"]}
+[warn] !  No hash algorithm specified. Password users cannot be imported. 
+[debug] [2026-03-08T22:54:04.018Z] TypeError: Cannot read properties of undefined (reading 'endsWith')
+    at Command.actionFn (C:\Users\mirco\AppData\Local\npm-cache\_npx\e67942ba90d3ff08\node_modules\firebase-tools\lib\commands\auth-import.js:37:19)
+    at C:\Users\mirco\AppData\Local\npm-cache\_npx\e67942ba90d3ff08\node_modules\firebase-tools\lib\command.js:243:25
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+[error] 
+[error] Error: An unexpected error has occurred.
