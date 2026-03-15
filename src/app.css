@@ -1,10 +1,9 @@
 /* ============================================
-   Commander Track — RUINER Cyberpunk Theme
-   Deep blacks, crimson neon, cyan accents
+   Commander Track — Cyberpunk Theme
    ============================================ */
 
 :root {
-	/* RUINER Color palette */
+	/* Palette */
 	--color-bg: #0a0a0f;
 	--color-surface: #12121c;
 	--color-surface-elevated: #1a1a28;
@@ -23,7 +22,7 @@
 	--color-danger: #ff1744;
 	--color-info: #00b0ff;
 
-	/* Neon border colors */
+	/* Neon */
 	--neon-red: rgba(232, 25, 59, 0.5);
 	--neon-red-strong: rgba(232, 25, 59, 0.8);
 	--neon-cyan: rgba(0, 229, 255, 0.4);
@@ -43,7 +42,7 @@
 	--space-xl: 32px;
 	--space-2xl: 48px;
 
-	/* Border radius — bubbly/rounded */
+	/* Radius */
 	--radius-sm: 12px;
 	--radius-md: 16px;
 	--radius-lg: 20px;
@@ -55,7 +54,7 @@
 	--font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
 	--font-display: 'Inter', var(--font-sans);
 
-	/* Shadows & glows */
+	/* Shadows / Glows */
 	--shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.5);
 	--shadow-md: 0 4px 16px rgba(0, 0, 0, 0.6);
 	--shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.7);
@@ -71,7 +70,8 @@
 	--transition-slow: 400ms ease;
 }
 
-/* Reset */
+/* ── Reset ── */
+
 *,
 *::before,
 *::after {
@@ -96,22 +96,19 @@ body {
 	user-select: none;
 	touch-action: manipulation;
 	-webkit-overflow-scrolling: touch;
-	/* Subtle scanline texture */
-	background-image:
-		repeating-linear-gradient(
-			0deg,
-			transparent,
-			transparent 2px,
-			rgba(0, 0, 0, 0.03) 2px,
-			rgba(0, 0, 0, 0.03) 4px
-		);
+	background-image: repeating-linear-gradient(
+		0deg,
+		transparent,
+		transparent 2px,
+		rgba(0, 0, 0, 0.03) 2px,
+		rgba(0, 0, 0, 0.03) 4px
+	);
 }
 
 a {
 	color: var(--color-primary);
 	text-decoration: none;
 }
-
 a:hover {
 	color: var(--color-primary-light);
 }
@@ -153,55 +150,81 @@ textarea:focus {
 ::-webkit-scrollbar {
 	width: 4px;
 }
-
 ::-webkit-scrollbar-track {
 	background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
 	background: var(--color-surface-elevated);
 	border-radius: 2px;
 }
 
-/* Animations */
+/* ── Animations ── */
+
 @keyframes pulse {
-	0%, 100% { opacity: 1; }
-	50% { opacity: 0.5; }
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.5;
+	}
 }
 
 @keyframes pulse-border {
-	0%, 100% { box-shadow: 0 0 0 0 rgba(232, 25, 59, 0.7); }
-	50% { box-shadow: 0 0 0 8px rgba(232, 25, 59, 0); }
-}
-
-@keyframes glow-green {
-	0%, 100% { box-shadow: 0 0 8px rgba(0, 230, 118, 0.4); }
-	50% { box-shadow: 0 0 16px rgba(0, 230, 118, 0.7); }
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 rgba(232, 25, 59, 0.7);
+	}
+	50% {
+		box-shadow: 0 0 0 8px rgba(232, 25, 59, 0);
+	}
 }
 
 @keyframes fade-in {
-	from { opacity: 0; transform: translateY(8px); }
-	to { opacity: 1; transform: translateY(0); }
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
 }
 
 @keyframes scale-in {
-	from { opacity: 0; transform: scale(0.95); }
-	to { opacity: 1; transform: scale(1); }
+	from {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
 }
 
 @keyframes neon-flicker {
-	0%, 100% { opacity: 1; }
-	92% { opacity: 1; }
-	93% { opacity: 0.8; }
-	94% { opacity: 1; }
-	96% { opacity: 0.9; }
-	97% { opacity: 1; }
+	0%,
+	100% {
+		opacity: 1;
+	}
+	92% {
+		opacity: 1;
+	}
+	93% {
+		opacity: 0.8;
+	}
+	94% {
+		opacity: 1;
+	}
+	96% {
+		opacity: 0.9;
+	}
+	97% {
+		opacity: 1;
+	}
 }
 
 .animate-fade-in {
-	animation: fade-in var(--transition-normal) forwards;
+	animation: fade-in 0.35s ease both;
 }
 
-.animate-scale-in {
-	animation: scale-in var(--transition-normal) forwards;
-}

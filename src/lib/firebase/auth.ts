@@ -1,7 +1,12 @@
+/* ============================================
+   Auth Store — Google + Email/Password + Debug bypass
+   ============================================ */
+
 import { writable, type Readable } from 'svelte/store';
+import { isDebugMode } from '$lib/utils/env';
 import { isFirebaseConfigured } from '$lib/services/data-service';
 
-/* ─── Local dev user (used when Firebase is not configured) ─── */
+/* ─── Local dev user ─── */
 
 export interface LocalUser {
 	uid: string;
@@ -12,36 +17,46 @@ export interface LocalUser {
 
 const LOCAL_DEV_USER: LocalUser = {
 	uid: 'local-dev-user',
-	displayName: 'Local Player',
+	displayName: 'Dev Player',
 	email: 'dev@localhost',
 	photoURL: null
 };
 
-/* ─── Auth store ─── */
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AuthUser = LocalUser | any; // `any` = Firebase User when available
+type AuthUser = LocalUser | any;
 
-function createAuthStore(): Readable<AuthUser | null> & { init: () => void } {
+/* ─── Reactive store ─── */
+
+function createAuthStore(): Readable<AuthUser | null> & {
+	init: () => void;
+	set: (u: AuthUser | null) => void;
+} {
 	const { subscribe, set } = writable<AuthUser | null>(null);
 	let initialized = false;
 
 	return {
 		subscribe,
+		set,
 		init() {
 			if (initialized) return;
 			initialized = true;
 
-			if (!isFirebaseConfigured()) {
-				// No Firebase → auto-sign-in as local dev user
+			if (isDebugMode()) {
 				set(LOCAL_DEV_USER);
 				return;
 			}
 
-			// Firebase configured → use real auth
+			if (!isFirebaseConfigured()) {
+				console.error('[auth] Firebase config missing — auth required in production.');
+				set(null);
+				return;
+			}
+
 			import('firebase/auth').then(({ onAuthStateChanged }) => {
-				import('$lib/firebase/config').then(({ getFirebaseAuth }) => {
-					onAuthStateChanged(getFirebaseAuth(), (user) => set(user));
+				import('$lib/firebase/config').then(({ ensureFirebaseAuth }) => {
+					ensureFirebaseAuth().then((auth) => {
+						onAuthStateChanged(auth, (user) => set(user));
+					});
 				});
 			});
 		}
@@ -50,26 +65,49 @@ function createAuthStore(): Readable<AuthUser | null> & { init: () => void } {
 
 export const authUser = createAuthStore();
 
-export async function signIn(): Promise<void> {
-	if (!isFirebaseConfigured()) {
-		// Local dev: just set the local user (no-op if already set)
-		authUser.init();
+/* ─── Sign-in helpers ─── */
+
+export async function signInWithGoogle(): Promise<void> {
+	if (isDebugMode()) {
+		authUser.set(LOCAL_DEV_USER);
 		return;
 	}
-
 	const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
-	const { getFirebaseAuth } = await import('$lib/firebase/config');
-	await signInWithPopup(getFirebaseAuth(), new GoogleAuthProvider());
+	const { ensureFirebaseAuth } = await import('$lib/firebase/config');
+	const auth = await ensureFirebaseAuth();
+	await signInWithPopup(auth, new GoogleAuthProvider());
+}
+
+export async function signInWithEmail(email: string, password: string): Promise<void> {
+	if (isDebugMode()) {
+		authUser.set(LOCAL_DEV_USER);
+		return;
+	}
+	const { signInWithEmailAndPassword } = await import('firebase/auth');
+	const { ensureFirebaseAuth } = await import('$lib/firebase/config');
+	const auth = await ensureFirebaseAuth();
+	await signInWithEmailAndPassword(auth, email, password);
+}
+
+export async function registerWithEmail(email: string, password: string): Promise<void> {
+	if (isDebugMode()) {
+		authUser.set(LOCAL_DEV_USER);
+		return;
+	}
+	const { createUserWithEmailAndPassword } = await import('firebase/auth');
+	const { ensureFirebaseAuth } = await import('$lib/firebase/config');
+	const auth = await ensureFirebaseAuth();
+	await createUserWithEmailAndPassword(auth, email, password);
 }
 
 export async function signOut(): Promise<void> {
-	if (!isFirebaseConfigured()) {
-		// Local dev: nothing to sign out from
+	if (isDebugMode()) {
+		authUser.set(null);
 		return;
 	}
-
-	const { signOut: firebaseSignOut } = await import('firebase/auth');
-	const { getFirebaseAuth } = await import('$lib/firebase/config');
-	await firebaseSignOut(getFirebaseAuth());
+	const { signOut: fbSignOut } = await import('firebase/auth');
+	const { ensureFirebaseAuth } = await import('$lib/firebase/config');
+	const auth = await ensureFirebaseAuth();
+	await fbSignOut(auth);
 }
 

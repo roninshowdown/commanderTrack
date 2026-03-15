@@ -1,6 +1,5 @@
 /* ============================================
    Data Service Interface
-   Common contract for Firebase and LocalStorage
    ============================================ */
 
 import type { Player, Deck, GameRecord, LogEntry } from '$lib/models/types';

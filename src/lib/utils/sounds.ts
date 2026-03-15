@@ -1,64 +1,44 @@
+/* ============================================
+   Audio Feedback — Web Audio API tones
+   ============================================ */
+
 const SOUNDS = {
-	gain: [523.25, 659.25], // C5 → E5
-	loss: [329.63, 261.63], // E4 → C4
-	critical: [880, 0, 880], // A5 beep
-	turnEnd: [440, 554.37, 659.25] // A4 → C#5 → E5
-};
+	gain: [523.25, 659.25],
+	loss: [329.63, 261.63],
+	critical: [880, 0, 880],
+	turnEnd: [440, 554.37, 659.25]
+} as const;
 
-let audioCtx: AudioContext | null = null;
+let ctx: AudioContext | null = null;
 
-function getAudioContext(): AudioContext {
-	if (!audioCtx) {
-		audioCtx = new AudioContext();
-	}
-	return audioCtx;
+function getCtx(): AudioContext {
+	if (!ctx) ctx = new AudioContext();
+	return ctx;
 }
 
-function playTone(frequency: number, duration: number, startTime: number): void {
-	const ctx = getAudioContext();
-	if (frequency === 0) return; // silence
-
-	const oscillator = ctx.createOscillator();
-	const gainNode = ctx.createGain();
-
-	oscillator.type = 'sine';
-	oscillator.frequency.value = frequency;
-	gainNode.gain.value = 0.1;
-
-	// Fade out
-	gainNode.gain.setValueAtTime(0.1, startTime);
-	gainNode.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-	oscillator.connect(gainNode);
-	gainNode.connect(ctx.destination);
-
-	oscillator.start(startTime);
-	oscillator.stop(startTime + duration);
+function playTone(freq: number, dur: number, start: number): void {
+	if (freq === 0) return;
+	const c = getCtx();
+	const osc = c.createOscillator();
+	const gain = c.createGain();
+	osc.type = 'sine';
+	osc.frequency.value = freq;
+	gain.gain.setValueAtTime(0.1, start);
+	gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+	osc.connect(gain).connect(c.destination);
+	osc.start(start);
+	osc.stop(start + dur);
 }
 
-function playSequence(frequencies: number[]): void {
-	const ctx = getAudioContext();
-	const now = ctx.currentTime;
-	const noteDuration = 0.12;
-
-	frequencies.forEach((freq, i) => {
-		playTone(freq, noteDuration, now + i * noteDuration);
-	});
+function playSeq(freqs: readonly number[]): void {
+	const c = getCtx();
+	const now = c.currentTime;
+	const note = 0.12;
+	freqs.forEach((f, i) => playTone(f, note, now + i * note));
 }
 
-export function playGainSound(): void {
-	playSequence(SOUNDS.gain);
-}
-
-export function playLossSound(): void {
-	playSequence(SOUNDS.loss);
-}
-
-export function playCriticalSound(): void {
-	playSequence(SOUNDS.critical);
-}
-
-export function playTurnEndSound(): void {
-	playSequence(SOUNDS.turnEnd);
-}
+export const playGainSound = () => playSeq(SOUNDS.gain);
+export const playLossSound = () => playSeq(SOUNDS.loss);
+export const playCriticalSound = () => playSeq(SOUNDS.critical);
+export const playTurnEndSound = () => playSeq(SOUNDS.turnEnd);
 

@@ -3,104 +3,121 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import { searchCommander } from '$lib/services/scryfall';
+	import { uploadPlayerImage } from '$lib/firebase/storage';
+	import { isFirebaseConfigured } from '$lib/services/data-service';
+	import { isDebugMode } from '$lib/utils/env';
 
 	interface Props {
 		player?: Player | null;
-		onsave: (data: Omit<Player, 'id'>) => void;
+		onsave: (data: Omit<Player, 'id'>) => void | Promise<void>;
 		oncancel: () => void;
+		disabled?: boolean;
 	}
 
-	let { player = null, onsave, oncancel }: Props = $props();
+	let { player = null, onsave, oncancel, disabled = false }: Props = $props();
 
-	let name = $state(player?.name ?? '');
-	let imageUrl = $state(player?.imageUrl ?? '');
-	let searching = $state(false);
+	const initialName = player?.name ?? '';
+	const initialImage = player?.imageUrl ?? '';
 
+	let name: string = $state(initialName);
+	let imageUrl: string = $state(initialImage);
+	let selectedFile: File | null = $state(null);
+	let previewUrl: string = $state(initialImage);
+	let searching: boolean = $state(false);
+	let uploading: boolean = $state(false);
+
+	/* Image file picked from device */
+	function onFileChange(e: Event) {
+		const file = (e.target as HTMLInputElement).files?.[0];
+		if (!file) return;
+		selectedFile = file;
+		previewUrl = URL.createObjectURL(file);
+	}
+
+	function toBase64(file: File): Promise<string> {
+		return new Promise((resolve, reject) => {
+			const r = new FileReader();
+			r.onload = () => resolve(r.result as string);
+			r.onerror = reject;
+			r.readAsDataURL(file);
+		});
+	}
+
+	async function resolveImage(): Promise<string | undefined> {
+		if (selectedFile) {
+			uploading = true;
+			try {
+				return (isDebugMode() || !isFirebaseConfigured())
+					? await toBase64(selectedFile)
+					: await uploadPlayerImage(selectedFile);
+			} finally {
+				uploading = false;
+			}
+		}
+		return imageUrl || undefined;
+	}
+
+	/* Scryfall image search */
 	async function searchImage() {
 		if (!name.trim()) return;
 		searching = true;
-		const result = await searchCommander(name);
-		if (result) {
-			imageUrl = result.imageUrl;
-		}
+		const r = await searchCommander(name);
+		if (r) { imageUrl = r.imageUrl; previewUrl = r.imageUrl; selectedFile = null; }
 		searching = false;
 	}
 
-	function handleSubmit() {
-		if (!name.trim()) return;
-		onsave({ name: name.trim(), imageUrl: imageUrl || undefined });
+	async function handleSubmit() {
+		if (!name.trim() || disabled || uploading) return;
+		const finalImage = await resolveImage();
+		await onsave({ name: name.trim(), imageUrl: finalImage });
 	}
 </script>
 
 <form class="form" onsubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
 	<div class="field">
-		<label for="player-name">Name</label>
-		<input id="player-name" type="text" bind:value={name} placeholder="Player name" required />
+		<label for="pf-name">Name <span class="req">*</span></label>
+		<input id="pf-name" type="text" bind:value={name} placeholder="Player name" required {disabled} />
 	</div>
 
 	<div class="field">
-		<label for="player-image">Image URL</label>
-		<div class="image-row">
-			<input id="player-image" type="text" bind:value={imageUrl} placeholder="Image URL (optional)" />
-			<Button variant="ghost" size="sm" onclick={searchImage} disabled={searching}>
-				{#snippet children()}{#if searching}...{:else}<Icon name="search" size={16} />{/if}{/snippet}
+		<label for="pf-url">Image URL <span class="opt">(optional)</span></label>
+		<div class="row">
+			<input id="pf-url" type="text" bind:value={imageUrl} placeholder="https://…" {disabled}
+				oninput={() => { previewUrl = imageUrl; selectedFile = null; }} />
+			<Button variant="ghost" size="sm" onclick={searchImage} disabled={searching || disabled}>
+				{#snippet children()}{#if searching}…{:else}<Icon name="search" size={16} />{/if}{/snippet}
 			</Button>
 		</div>
-		{#if imageUrl}
-			<img src={imageUrl} alt={name} class="preview" />
-		{/if}
 	</div>
 
+	<div class="field">
+		<label for="pf-upload">Upload Image <span class="opt">(optional)</span></label>
+		<input id="pf-upload" type="file" accept="image/jpeg,image/png,image/gif,image/webp" onchange={onFileChange} {disabled} />
+	</div>
+
+	{#if previewUrl}
+		<img src={previewUrl} alt={name} class="preview" />
+	{/if}
+
 	<div class="actions">
-		<Button variant="ghost" onclick={oncancel}>
-			{#snippet children()}Cancel{/snippet}
-		</Button>
-		<Button variant="primary" onclick={handleSubmit}>
-			{#snippet children()}{player ? 'Update' : 'Create'}{/snippet}
+		<Button variant="ghost" onclick={oncancel} {disabled}>{#snippet children()}Cancel{/snippet}</Button>
+		<Button variant="primary" onclick={handleSubmit} disabled={!name.trim() || disabled || uploading}>
+			{#snippet children()}{#if disabled || uploading}Saving…{:else}{player ? 'Update' : 'Create'}{/if}{/snippet}
 		</Button>
 	</div>
 </form>
 
 <style>
-	.form {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-md);
-	}
-
-	.field {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-xs);
-	}
-
-	label {
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--color-text-secondary);
-	}
-
-	.image-row {
-		display: flex;
-		gap: var(--space-sm);
-	}
-
-	.image-row input {
-		flex: 1;
-	}
-
-	.preview {
-		width: 100%;
-		max-width: 200px;
-		border-radius: var(--radius-md);
-		margin-top: var(--space-sm);
-	}
-
-	.actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: var(--space-sm);
-		margin-top: var(--space-md);
-	}
+	.form { display: flex; flex-direction: column; gap: var(--space-md); }
+	.field { display: flex; flex-direction: column; gap: var(--space-xs); }
+	label { font-size: 0.85rem; font-weight: 600; color: var(--color-text-secondary); }
+	.req { color: var(--color-primary); }
+	.opt { font-weight: 400; font-size: 0.75rem; color: var(--color-text-muted); }
+	.row { display: flex; gap: var(--space-sm); }
+	.row input { flex: 1; }
+	.preview { width: 100%; max-width: 200px; border-radius: var(--radius-md); margin-top: var(--space-sm); }
+	.actions { display: flex; justify-content: flex-end; gap: var(--space-sm); margin-top: var(--space-md); }
+	input[type='file'] { font-size: 0.8rem; padding: var(--space-sm); }
 </style>
+
 

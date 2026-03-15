@@ -21,37 +21,37 @@ export interface Deck {
 	colors: MtgColor[];
 }
 
-/** Timer variant */
+/** Timer variant identifier */
 export type TimerVariant = 'A' | 'B';
 
 /** Variant A timer config */
 export interface TimerConfigA {
 	variant: 'A';
-	poolTimeSeconds: number;       // default 1800 (30 min)
-	sharedStartTimeSeconds: number; // default 600 (10 min)
+	poolTimeSeconds: number;
+	sharedStartTimeSeconds: number;
 }
 
 /** Variant B timer config */
 export interface TimerConfigB {
 	variant: 'B';
-	poolTimeSeconds: number;              // default 1800 (30 min)
-	playerTimeSeconds: number;            // default 120 (2 min)
-	reactionTimeSeconds: number;          // default 60 (1 min)
-	scaleFactorPlayerTimeSeconds: number; // default 10
-	scaleFactorReactionTimeSeconds: number; // default 10
+	poolTimeSeconds: number;
+	playerTimeSeconds: number;
+	reactionTimeSeconds: number;
+	scaleFactorPlayerTimeSeconds: number;
+	scaleFactorReactionTimeSeconds: number;
 }
 
 export type TimerConfig = TimerConfigA | TimerConfigB;
 
-/** Game configuration for setup */
+/** Game configuration created during setup */
 export interface GameConfig {
 	id: string;
-	maxLife: number;       // default 40
+	maxLife: number;
 	timerConfig: TimerConfig;
 	createdAt: number;
 }
 
-/** In-game player state */
+/** In-game per-player state */
 export interface GamePlayerState {
 	playerId: string;
 	deckId: string;
@@ -59,31 +59,30 @@ export interface GamePlayerState {
 	commanderName: string;
 	commanderImageUrl: string;
 	life: number;
-	poolTimeRemaining: number;        // in seconds
-	playerTimeRemaining: number;      // Variant B only
-	reactionTimeRemaining: number;    // Variant B only
-	commanderDamageTaken: Record<string, number>; // key = source player id, value = damage
+	poolTimeRemaining: number;
+	playerTimeRemaining: number;
+	reactionTimeRemaining: number;
+	commanderDamageTaken: Record<string, number>;
 	totalLifeGained: number;
 	totalLifeLost: number;
 	isDead: boolean;
 }
 
-/** Timer state machine states */
+/** Timer phase state machine */
 export type TimerPhase =
 	| 'IDLE'
-	| 'SHARED_START'    // Variant A only
-	| 'PLAYER_TIME'     // Active player's turn time (Variant B) or pool time (Variant A after shared)
-	| 'REACTION_TIME'   // Reactive player's reaction budget (Variant B)
-	| 'POOL_TIME';      // Fallback pool time
+	| 'SHARED_START'
+	| 'PLAYER_TIME'
+	| 'REACTION_TIME'
+	| 'POOL_TIME';
 
-/** Which timer source is actively counting */
+/** Which timer source is actively counting down */
 export interface ActiveTimerInfo {
 	phase: TimerPhase;
-	/** Index of the player whose timer is ticking */
 	targetPlayerIndex: number;
 }
 
-/** Full game state */
+/** Full game state kept in memory */
 export interface GameState {
 	config: GameConfig;
 	players: GamePlayerState[];
@@ -95,23 +94,22 @@ export interface GameState {
 	isFinished: boolean;
 	winnerId: string | null;
 	timerInfo: ActiveTimerInfo;
-	/** Variant A: shared start time remaining */
 	sharedStartTimeRemaining: number;
 }
 
-/** Log entry for life changes */
+/** Log entry for life / commander-damage changes */
 export interface LogEntry {
 	id: string;
 	gameId: string;
 	playerId: string;
 	playerName: string;
-	value: number; // positive = gain, negative = loss
+	value: number;
 	type: 'life' | 'commander_damage';
-	sourcePlayerId?: string; // for commander damage
+	sourcePlayerId?: string;
 	timestamp: number;
 }
 
-/** Rank entry for dashboard */
+/** Rank entry (computed, not stored) */
 export interface RankEntry {
 	playerId: string;
 	playerName: string;
@@ -123,7 +121,7 @@ export interface RankEntry {
 	winRate: number;
 }
 
-/** Game record for persistence */
+/** Game record persisted after a game ends */
 export interface GameRecord {
 	id: string;
 	playerIds: string[];

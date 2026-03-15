@@ -11,10 +11,7 @@ const config = {
 			fallback: 'index.html',
 			precompress: false,
 			strict: true
-		}),
-		serviceWorker: {
-			register: true
-		}
+		})
 	}
 };
 

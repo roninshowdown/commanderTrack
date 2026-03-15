@@ -1,122 +1,60 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { onMount } from 'svelte';
 
 	interface Props {
+		title: string;
 		open: boolean;
-		title?: string;
-		onclose?: () => void;
-		children?: Snippet;
+		children: import('svelte').Snippet;
 	}
 
-	let { open = $bindable(), title = '', onclose, children }: Props = $props();
+	let { title, open = $bindable(false), children }: Props = $props();
 
-	function handleBackdrop() {
-		open = false;
-		onclose?.();
+	function onKey(e: KeyboardEvent) {
+		if (e.key === 'Escape') open = false;
 	}
 
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') handleBackdrop();
-	}
+	onMount(() => {
+		document.addEventListener('keydown', onKey);
+		return () => document.removeEventListener('keydown', onKey);
+	});
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
 {#if open}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-backdrop" onpointerdown={handleBackdrop}>
+	<div class="backdrop" onclick={() => (open = false)}>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
-		<div
-			class="modal"
-			role="dialog"
-			aria-modal="true"
-			aria-label={title || 'Dialog'}
-			tabindex="-1"
-			onpointerdown={(e) => e.stopPropagation()}
-		>
-			{#if title}
-				<div class="modal-header">
-					<h2>{title}</h2>
-					<button type="button" class="close-btn" onclick={handleBackdrop}>✕</button>
-				</div>
-			{/if}
+		<div class="modal animate-fade-in" onclick={(e) => e.stopPropagation()}>
+			<header class="modal-header">
+				<h2>{title}</h2>
+				<button class="close-btn" onclick={() => (open = false)}>✕</button>
+			</header>
 			<div class="modal-body">
-				{#if children}{@render children()}{/if}
+				{@render children()}
 			</div>
 		</div>
 	</div>
 {/if}
 
 <style>
-	.modal-backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgba(0, 0, 0, 0.8);
-		backdrop-filter: blur(8px);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
+	.backdrop {
+		position: fixed; inset: 0; z-index: 1000;
+		background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
 		padding: var(--space-md);
-		animation: fade-in 200ms ease;
 	}
-
 	.modal {
-		background: var(--color-surface);
-		border: 1px solid var(--neon-red);
-		border-radius: var(--radius-xl);
-		width: 100%;
-		max-width: 480px;
-		max-height: 90vh;
-		overflow-y: auto;
-		box-shadow: var(--glow-primary), var(--shadow-lg);
-		animation: scale-in 200ms ease;
+		width: 100%; max-width: 420px; max-height: 90dvh; overflow-y: auto;
+		background: var(--color-surface); border: 1px solid var(--color-surface-elevated);
+		border-radius: var(--radius-xl); padding: var(--space-lg);
+		box-shadow: var(--shadow-lg);
 	}
-
-	@media (max-width: 480px) {
-		.modal {
-			max-width: 100%;
-			max-height: 100dvh;
-			border-radius: var(--radius-lg);
-			margin: var(--space-sm);
-		}
-	}
-
 	.modal-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: var(--space-md) var(--space-lg);
-		border-bottom: 1px solid var(--color-surface-elevated);
+		display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);
 	}
-
-	.modal-header h2 {
-		font-size: 0.95rem;
-		font-weight: 800;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		color: var(--color-primary);
-	}
-
-	.close-btn {
-		width: 36px;
-		height: 36px;
-		border-radius: var(--radius-full);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 0.9rem;
-		color: var(--color-text-muted);
-		transition: all var(--transition-fast);
-		min-height: 36px;
-	}
-
-	.close-btn:hover {
-		background: var(--color-primary-dim);
-		color: var(--color-primary);
-	}
-
-	.modal-body {
-		padding: var(--space-lg);
-	}
+	.modal-header h2 { font-size: 1rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-primary); }
+	.close-btn { font-size: 1.2rem; color: var(--color-text-muted); min-height: 36px; }
+	.modal-body { display: flex; flex-direction: column; gap: var(--space-md); }
 </style>
+
+

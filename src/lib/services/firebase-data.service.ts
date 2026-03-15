@@ -1,118 +1,105 @@
 /* ============================================
-   Firebase Data Service
-   Wraps Firestore calls behind DataService interface
+   Firebase Data Service (Firestore)
    ============================================ */
 
 import {
-	collection,
-	doc,
-	getDocs,
-	getDoc,
-	updateDoc,
-	deleteDoc,
-	addDoc,
-	query,
-	where,
-	orderBy,
-	type DocumentData
+	collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
+	query, where, orderBy, type DocumentData, type Firestore
 } from 'firebase/firestore';
-import { getFirebaseDb } from '$lib/firebase/config';
+import { ensureFirebaseDb } from '$lib/firebase/config';
 import type { Player, Deck, GameRecord, LogEntry } from '$lib/models/types';
 import type { DataService } from './data-service.interface';
 
-export class FirebaseDataService implements DataService {
-	/* ─── Players ─── */
+function withTimeout<T>(p: Promise<T>, ms = 8000, label = 'Firestore'): Promise<T> {
+	return Promise.race([
+		p,
+		new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`${label} timed out (${ms}ms)`)), ms))
+	]);
+}
 
+export class FirebaseDataService implements DataService {
+	private _db: Firestore | null = null;
+
+	private async db(): Promise<Firestore> {
+		if (!this._db) this._db = await ensureFirebaseDb();
+		return this._db;
+	}
+
+	private async col(name: string) {
+		return collection(await this.db(), name);
+	}
+
+	/* ── Players ── */
 	async getPlayers(): Promise<Player[]> {
-		const snap = await getDocs(collection(getFirebaseDb(), 'players'));
+		const snap = await withTimeout(getDocs(await this.col('players')));
 		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Player);
 	}
-
 	async getPlayer(id: string): Promise<Player | null> {
-		const snap = await getDoc(doc(getFirebaseDb(), 'players', id));
+		const snap = await withTimeout(getDoc(doc(await this.db(), 'players', id)));
 		return snap.exists() ? ({ id: snap.id, ...snap.data() } as Player) : null;
 	}
-
 	async createPlayer(player: Omit<Player, 'id'>): Promise<string> {
-		const ref = await addDoc(collection(getFirebaseDb(), 'players'), player);
-		return ref.id;
+		const r = await withTimeout(addDoc(await this.col('players'), player));
+		return r.id;
 	}
-
 	async updatePlayer(id: string, data: Partial<Omit<Player, 'id'>>): Promise<void> {
-		await updateDoc(doc(getFirebaseDb(), 'players', id), data as DocumentData);
+		await withTimeout(updateDoc(doc(await this.db(), 'players', id), data as DocumentData));
 	}
-
 	async deletePlayer(id: string): Promise<void> {
+		const db = await this.db();
 		const decks = await this.getDecksForPlayer(id);
-		for (const deck of decks) {
-			await deleteDoc(doc(getFirebaseDb(), 'decks', deck.id));
-		}
-		await deleteDoc(doc(getFirebaseDb(), 'players', id));
+		for (const d of decks) await deleteDoc(doc(db, 'decks', d.id));
+		await deleteDoc(doc(db, 'players', id));
 	}
 
-	/* ─── Decks ─── */
-
+	/* ── Decks ── */
 	async getDecks(): Promise<Deck[]> {
-		const snap = await getDocs(collection(getFirebaseDb(), 'decks'));
+		const snap = await withTimeout(getDocs(await this.col('decks')));
 		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Deck);
 	}
-
 	async getDecksForPlayer(playerId: string): Promise<Deck[]> {
-		const q = query(collection(getFirebaseDb(), 'decks'), where('playerId', '==', playerId));
-		const snap = await getDocs(q);
+		const q = query(await this.col('decks'), where('playerId', '==', playerId));
+		const snap = await withTimeout(getDocs(q));
 		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Deck);
 	}
-
 	async createDeck(deck: Omit<Deck, 'id'>): Promise<string> {
-		const ref = await addDoc(collection(getFirebaseDb(), 'decks'), deck);
-		return ref.id;
+		const r = await withTimeout(addDoc(await this.col('decks'), deck));
+		return r.id;
 	}
-
 	async updateDeck(id: string, data: Partial<Omit<Deck, 'id'>>): Promise<void> {
-		await updateDoc(doc(getFirebaseDb(), 'decks', id), data as DocumentData);
+		await withTimeout(updateDoc(doc(await this.db(), 'decks', id), data as DocumentData));
 	}
-
 	async deleteDeck(id: string): Promise<void> {
-		await deleteDoc(doc(getFirebaseDb(), 'decks', id));
+		await withTimeout(deleteDoc(doc(await this.db(), 'decks', id)));
 	}
 
-	/* ─── Game Records ─── */
-
+	/* ── Game Records ── */
 	async saveGameRecord(record: Omit<GameRecord, 'id'>): Promise<string> {
-		const ref = await addDoc(collection(getFirebaseDb(), 'games'), record);
-		return ref.id;
+		const r = await withTimeout(addDoc(await this.col('games'), record));
+		return r.id;
 	}
-
 	async getGameRecords(): Promise<GameRecord[]> {
-		const q = query(collection(getFirebaseDb(), 'games'), orderBy('createdAt', 'desc'));
-		const snap = await getDocs(q);
+		const q = query(await this.col('games'), orderBy('createdAt', 'desc'));
+		const snap = await withTimeout(getDocs(q));
 		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as GameRecord);
 	}
-
 	async updateGameRecord(id: string, data: Partial<Omit<GameRecord, 'id'>>): Promise<void> {
-		await updateDoc(doc(getFirebaseDb(), 'games', id), data as DocumentData);
+		await withTimeout(updateDoc(doc(await this.db(), 'games', id), data as DocumentData));
 	}
 
-	/* ─── Log Entries ─── */
-
+	/* ── Log Entries ── */
 	async addLogEntry(entry: Omit<LogEntry, 'id'>): Promise<string> {
-		const ref = await addDoc(collection(getFirebaseDb(), 'gameLogs'), entry);
-		return ref.id;
+		const r = await withTimeout(addDoc(await this.col('gameLogs'), entry));
+		return r.id;
 	}
-
 	async getLogEntriesForGame(gameId: string): Promise<LogEntry[]> {
-		const q = query(
-			collection(getFirebaseDb(), 'gameLogs'),
-			where('gameId', '==', gameId),
-			orderBy('timestamp', 'desc')
-		);
-		const snap = await getDocs(q);
+		const q = query(await this.col('gameLogs'), where('gameId', '==', gameId), orderBy('timestamp', 'desc'));
+		const snap = await withTimeout(getDocs(q));
 		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LogEntry);
 	}
-
 	async getAllLogEntries(): Promise<LogEntry[]> {
-		const q = query(collection(getFirebaseDb(), 'gameLogs'), orderBy('timestamp', 'desc'));
-		const snap = await getDocs(q);
+		const q = query(await this.col('gameLogs'), orderBy('timestamp', 'desc'));
+		const snap = await withTimeout(getDocs(q));
 		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LogEntry);
 	}
 }

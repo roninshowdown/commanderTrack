@@ -1,266 +1,153 @@
 /* ============================================
-   Timer Engine — Pure logic, no UI dependencies
-   Handles Variant A and Variant B timer flows
+   Timer Engine — Pure logic, no UI deps
    ============================================ */
 
-import type {
-	GameState,
-	TimerConfigA,
-	TimerConfigB,
-	TimerPhase,
-	GamePlayerState
-} from '$lib/models/types';
+import type { GameState, TimerConfigB, GamePlayerState } from '$lib/models/types';
 
-/** Determine the scaled player time for a given round (Variant B) */
-export function getScaledPlayerTime(config: TimerConfigB, round: number): number {
-	return config.playerTimeSeconds + config.scaleFactorPlayerTimeSeconds * (round - 1);
+/* ── Scaling helpers ── */
+
+export function getScaledPlayerTime(cfg: TimerConfigB, round: number): number {
+	return cfg.playerTimeSeconds + cfg.scaleFactorPlayerTimeSeconds * (round - 1);
 }
 
-/** Determine the scaled reaction time for a given round (Variant B) */
-export function getScaledReactionTime(config: TimerConfigB, round: number): number {
-	return config.reactionTimeSeconds + config.scaleFactorReactionTimeSeconds * (round - 1);
+export function getScaledReactionTime(cfg: TimerConfigB, round: number): number {
+	return cfg.reactionTimeSeconds + cfg.scaleFactorReactionTimeSeconds * (round - 1);
 }
 
-/**
- * Tick the timer by 1 second. Returns updated game state.
- * This is the core tick function called every second while the game is running.
- */
+/* ── Tick (1 s) ── */
+
 export function tick(state: GameState): GameState {
 	if (!state.isRunning || state.isFinished) return state;
-
 	const next = structuredClone(state);
-	const config = next.config.timerConfig;
-	const activePlayer = next.players[next.activePlayerIndex];
-	const reactivePlayer =
-		next.reactivePlayerIndex !== null ? next.players[next.reactivePlayerIndex] : null;
+	const cfg = next.config.timerConfig;
+	const active = next.players[next.activePlayerIndex];
+	const reactive = next.reactivePlayerIndex !== null ? next.players[next.reactivePlayerIndex] : null;
 
-	if (config.variant === 'A') {
-		tickVariantA(next, activePlayer);
-	} else {
-		tickVariantB(next, config, activePlayer, reactivePlayer);
-	}
+	if (cfg.variant === 'A') tickA(next, active);
+	else tickB(next, cfg, active, reactive);
 
 	return next;
 }
 
-function tickVariantA(state: GameState, activePlayer: GamePlayerState): void {
-	if (state.timerInfo.phase === 'SHARED_START') {
-		// Shared start time phase
-		if (state.sharedStartTimeRemaining > 0) {
-			state.sharedStartTimeRemaining--;
-		}
-		if (state.sharedStartTimeRemaining <= 0) {
-			// Transition to pool time (player time = pool time in Variant A)
-			state.timerInfo = {
-				phase: 'PLAYER_TIME',
-				targetPlayerIndex: state.activePlayerIndex
-			};
+function tickA(s: GameState, active: GamePlayerState): void {
+	if (s.timerInfo.phase === 'SHARED_START') {
+		if (s.sharedStartTimeRemaining > 0) s.sharedStartTimeRemaining--;
+		if (s.sharedStartTimeRemaining <= 0) {
+			s.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: s.activePlayerIndex };
 		}
 	} else {
-		// Pool time phase (active player's pool time)
-		if (activePlayer.poolTimeRemaining > 0) {
-			activePlayer.poolTimeRemaining--;
-		}
-		state.timerInfo = {
-			phase: 'PLAYER_TIME',
-			targetPlayerIndex: state.activePlayerIndex
-		};
+		if (active.poolTimeRemaining > 0) active.poolTimeRemaining--;
+		s.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: s.activePlayerIndex };
 	}
 }
 
-function tickVariantB(
-	state: GameState,
-	config: TimerConfigB,
-	activePlayer: GamePlayerState,
-	reactivePlayer: GamePlayerState | null
-): void {
-	const phase = state.timerInfo.phase;
-
-	if (phase === 'REACTION_TIME' && reactivePlayer) {
-		// Reactive player's reaction time is ticking
-		if (reactivePlayer.reactionTimeRemaining > 0) {
-			reactivePlayer.reactionTimeRemaining--;
-		}
-		if (reactivePlayer.reactionTimeRemaining <= 0) {
-			// Reaction time exhausted → fall through to reactive player's pool time
-			state.timerInfo = {
-				phase: 'POOL_TIME',
-				targetPlayerIndex: state.reactivePlayerIndex!
-			};
+function tickB(s: GameState, cfg: TimerConfigB, active: GamePlayerState, reactive: GamePlayerState | null): void {
+	const phase = s.timerInfo.phase;
+	if (phase === 'REACTION_TIME' && reactive) {
+		if (reactive.reactionTimeRemaining > 0) reactive.reactionTimeRemaining--;
+		if (reactive.reactionTimeRemaining <= 0) {
+			s.timerInfo = { phase: 'POOL_TIME', targetPlayerIndex: s.reactivePlayerIndex! };
 		}
 	} else if (phase === 'POOL_TIME') {
-		// Someone's pool time is ticking
-		const targetPlayer = state.players[state.timerInfo.targetPlayerIndex];
-		if (targetPlayer.poolTimeRemaining > 0) {
-			targetPlayer.poolTimeRemaining--;
-		}
+		const t = s.players[s.timerInfo.targetPlayerIndex];
+		if (t.poolTimeRemaining > 0) t.poolTimeRemaining--;
 	} else {
-		// PLAYER_TIME: active player's turn time
-		if (activePlayer.playerTimeRemaining > 0) {
-			activePlayer.playerTimeRemaining--;
-		}
-		if (activePlayer.playerTimeRemaining <= 0) {
-			// Player time exhausted → fall through to active player's pool time
-			state.timerInfo = {
-				phase: 'POOL_TIME',
-				targetPlayerIndex: state.activePlayerIndex
-			};
+		// PLAYER_TIME
+		if (active.playerTimeRemaining > 0) active.playerTimeRemaining--;
+		if (active.playerTimeRemaining <= 0) {
+			s.timerInfo = { phase: 'POOL_TIME', targetPlayerIndex: s.activePlayerIndex };
 		}
 	}
 }
 
-/** Start the game — initializes timer phase */
+/* ── State transitions ── */
+
 export function startGame(state: GameState): GameState {
 	const next = structuredClone(state);
 	next.isRunning = true;
-
 	if (next.config.timerConfig.variant === 'A') {
 		next.timerInfo = { phase: 'SHARED_START', targetPlayerIndex: next.activePlayerIndex };
 	} else {
+		const cfg = next.config.timerConfig as TimerConfigB;
+		next.players[next.activePlayerIndex].playerTimeRemaining = getScaledPlayerTime(cfg, 1);
 		next.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: next.activePlayerIndex };
-		// Initialize player time for the first turn
-		const config = next.config.timerConfig as TimerConfigB;
-		next.players[next.activePlayerIndex].playerTimeRemaining = getScaledPlayerTime(config, 1);
 	}
-
 	return next;
 }
 
-/** Pause/unpause the game */
 export function togglePause(state: GameState): GameState {
 	const next = structuredClone(state);
 	next.isRunning = !next.isRunning;
 	return next;
 }
 
-/**
- * Pass priority to a reactive player (non-active).
- * Resets the reactive player's reaction time to the current scaled value.
- */
-export function passToReactivePlayer(state: GameState, reactivePlayerIndex: number): GameState {
-	if (state.config.timerConfig.variant === 'A') return state; // No reaction time in Variant A
-
+export function passToReactivePlayer(state: GameState, idx: number): GameState {
+	if (state.config.timerConfig.variant === 'A') return state;
 	const next = structuredClone(state);
-	const config = next.config.timerConfig as TimerConfigB;
-
-	next.reactivePlayerIndex = reactivePlayerIndex;
-
-	// Reset reaction time to scaled value for this round
-	next.players[reactivePlayerIndex].reactionTimeRemaining = getScaledReactionTime(
-		config,
-		next.currentRound
-	);
-
-	next.timerInfo = {
-		phase: 'REACTION_TIME',
-		targetPlayerIndex: reactivePlayerIndex
-	};
-
+	const cfg = next.config.timerConfig as TimerConfigB;
+	next.reactivePlayerIndex = idx;
+	next.players[idx].reactionTimeRemaining = getScaledReactionTime(cfg, next.currentRound);
+	next.timerInfo = { phase: 'REACTION_TIME', targetPlayerIndex: idx };
 	return next;
 }
 
-/**
- * Return priority from reactive player back to active player.
- * Resets reaction time but continues player time without resetting.
- */
 export function returnToActivePlayer(state: GameState): GameState {
 	if (state.config.timerConfig.variant === 'A') return state;
-
 	const next = structuredClone(state);
-
-	// Reset the reactive player's reaction time
-	if (next.reactivePlayerIndex !== null) {
-		next.players[next.reactivePlayerIndex].reactionTimeRemaining = 0;
-	}
-
+	if (next.reactivePlayerIndex !== null) next.players[next.reactivePlayerIndex].reactionTimeRemaining = 0;
 	next.reactivePlayerIndex = null;
-
-	// If active player still has player time, resume it; otherwise pool time
-	const activePlayer = next.players[next.activePlayerIndex];
-	if (activePlayer.playerTimeRemaining > 0) {
-		next.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: next.activePlayerIndex };
-	} else {
-		next.timerInfo = { phase: 'POOL_TIME', targetPlayerIndex: next.activePlayerIndex };
-	}
-
+	const active = next.players[next.activePlayerIndex];
+	next.timerInfo = active.playerTimeRemaining > 0
+		? { phase: 'PLAYER_TIME', targetPlayerIndex: next.activePlayerIndex }
+		: { phase: 'POOL_TIME', targetPlayerIndex: next.activePlayerIndex };
 	return next;
 }
 
-/**
- * Advance to the next player's turn.
- * Increments round counter when all players have had a turn.
- */
 export function nextTurn(state: GameState): GameState {
 	const next = structuredClone(state);
-
-	// Clear reactive player
 	next.reactivePlayerIndex = null;
 	next.turnCount++;
 
-	// Find next alive player
-	let nextIndex = (next.activePlayerIndex + 1) % next.players.length;
-	while (next.players[nextIndex].isDead && nextIndex !== next.activePlayerIndex) {
-		nextIndex = (nextIndex + 1) % next.players.length;
+	let idx = (next.activePlayerIndex + 1) % next.players.length;
+	while (next.players[idx].isDead && idx !== next.activePlayerIndex) {
+		idx = (idx + 1) % next.players.length;
 	}
+	next.activePlayerIndex = idx;
 
-	next.activePlayerIndex = nextIndex;
+	const alive = next.players.filter((p) => !p.isDead).length;
+	if (alive > 0 && next.turnCount % alive === 0) next.currentRound++;
 
-	// Check if a full round has been completed
-	const alivePlayers = next.players.filter((p) => !p.isDead).length;
-	if (alivePlayers > 0 && next.turnCount % alivePlayers === 0) {
-		next.currentRound++;
-	}
-
-	// Set up timer for the new active player
 	if (next.config.timerConfig.variant === 'A') {
-		if (next.sharedStartTimeRemaining > 0) {
-			next.timerInfo = { phase: 'SHARED_START', targetPlayerIndex: nextIndex };
-		} else {
-			next.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: nextIndex };
-		}
+		next.timerInfo = next.sharedStartTimeRemaining > 0
+			? { phase: 'SHARED_START', targetPlayerIndex: idx }
+			: { phase: 'PLAYER_TIME', targetPlayerIndex: idx };
 	} else {
-		const config = next.config.timerConfig as TimerConfigB;
-		// Reset player time for the new active player based on current round scaling
-		next.players[nextIndex].playerTimeRemaining = getScaledPlayerTime(config, next.currentRound);
-		next.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: nextIndex };
+		const cfg = next.config.timerConfig as TimerConfigB;
+		next.players[idx].playerTimeRemaining = getScaledPlayerTime(cfg, next.currentRound);
+		next.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: idx };
 	}
-
 	return next;
 }
 
-/** Check if a timer value is in the critical warning zone (≤10s) */
+/* ── Helpers ── */
+
 export function isCritical(seconds: number): boolean {
 	return seconds > 0 && seconds <= 10;
 }
 
-/** Get the currently ticking time value from the game state */
 export function getCurrentTickingTime(state: GameState): number {
-	const phase = state.timerInfo.phase;
-	const targetPlayer = state.players[state.timerInfo.targetPlayerIndex];
-
-	if (!targetPlayer) return 0;
-
+	const { phase, targetPlayerIndex } = state.timerInfo;
+	const p = state.players[targetPlayerIndex];
+	if (!p) return 0;
 	switch (phase) {
-		case 'SHARED_START':
-			return state.sharedStartTimeRemaining;
-		case 'PLAYER_TIME': {
-			// Variant A uses pool time for the player-time phase (playerTimeRemaining is 0)
-			// Variant B uses the actual player time
-			const variant = state.config.timerConfig.variant;
-			if (variant === 'A') {
-				return targetPlayer.poolTimeRemaining;
-			}
-			// Variant B: show playerTime if it still has time, otherwise pool
-			return targetPlayer.playerTimeRemaining > 0
-				? targetPlayer.playerTimeRemaining
-				: targetPlayer.poolTimeRemaining;
-		}
-		case 'REACTION_TIME':
-			return targetPlayer.reactionTimeRemaining;
-		case 'POOL_TIME':
-			return targetPlayer.poolTimeRemaining;
-		default:
-			return 0;
+		case 'SHARED_START': return state.sharedStartTimeRemaining;
+		case 'PLAYER_TIME':
+			return state.config.timerConfig.variant === 'A'
+				? p.poolTimeRemaining
+				: (p.playerTimeRemaining > 0 ? p.playerTimeRemaining : p.poolTimeRemaining);
+		case 'REACTION_TIME': return p.reactionTimeRemaining;
+		case 'POOL_TIME': return p.poolTimeRemaining;
+		default: return 0;
 	}
 }
 

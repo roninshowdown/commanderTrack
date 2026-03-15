@@ -1,13 +1,14 @@
 {
   "name": "commandertrack",
   "version": "1.0.0",
-  "description": "Magic the Gathering Life Tracker with Timer",
+  "description": "Magic the Gathering Commander Life & Timer Tracker PWA",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
-    "dev:debug": "node -e \"require('fs').copyFileSync('.env.debug', '.env')\" && vite dev",
-    "dev:firebase": "node -e \"require('fs').copyFileSync('.env.firebase', '.env')\" && vite dev",
+    "clean": "node -e \"const fs=require('fs');['node_modules/.vite','.svelte-kit'].forEach(d=>{fs.rmSync(d,{recursive:true,force:true})})\"",
+    "dev": "npm run clean && vite dev",
+    "dev:debug": "npm run clean && node scripts/switch-env.js debug && vite dev",
+    "dev:firebase": "npm run clean && node scripts/switch-env.js firebase && vite dev",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -30,3 +31,4 @@
     "firebase": "^11.0.0"
   }
 }
+

@@ -1,4 +1,4 @@
-export { getFirebaseApp, getFirebaseAuth, getFirebaseDb } from './config';
-export { authUser, signIn, signOut } from './auth';
-export * from './firestore';
+export { authUser, signInWithGoogle, signInWithEmail, registerWithEmail, signOut } from './auth';
+export { getFirebaseDb, getFirebaseAuth, getFirebaseStorage, ensureFirebaseAuth, ensureFirebaseDb, ensureFirebaseStorage } from './config';
+export { uploadPlayerImage } from './storage';
 
