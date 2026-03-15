@@ -1,13 +1,12 @@
 # commanderTrack
 
-# Overview
-This is a Magic the Gathering Life Tracker app which also tracks Timer.
+A modern Magic the Gathering Commander life & timer tracker with analytics.
 
-## Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+ (recommended: 20+)
-- *(Optional)* A Firebase project with Firestore and Google Auth enabled
+- *(Optional)* A Firebase project with Firestore and Google Auth ([Setup Guide](./FIREBASE_SETUP.md))
 
 ### Installation
 ```bash
@@ -15,15 +14,54 @@ npm install
 ```
 
 ### Configuration
-The app works **out of the box in Local Dev Mode** — no Firebase required.
-Data is stored in the browser's `localStorage`.
 
-To enable Firebase (cloud persistence + Google sign-in):
-1. Copy `.env.example` to `.env`
-2. Replace the placeholder values with your Firebase project credentials
+#### Option 1: Debug Mode (Instant Start with Mock Data)
+Perfect for development and testing!
 
-> When `VITE_FIREBASE_API_KEY` is missing or starts with `your-`, the app
-> auto-detects this and runs in **Local Dev Mode** (localStorage + bypass auth).
+1. Start debug mode with one command:
+   ```bash
+   npm run dev:debug
+   ```
+
+   **OR** manually edit `.env`:
+   ```env
+   VITE_DEBUG_MODE=true
+   # Leave Firebase credentials as placeholders
+   VITE_FIREBASE_API_KEY=your-api-key
+   ```
+
+2. Open http://localhost:5173
+
+The app will **automatically populate** with:
+- ✅ 6 mock players with avatars
+- ✅ 10-15 commander decks with real card images
+- ✅ 15 completed games with full history
+- ✅ Hundreds of log entries for analytics
+
+**No authentication required!** Data stored in `localStorage`.
+
+#### Option 2: Local Mode (Empty State)
+```env
+VITE_DEBUG_MODE=false
+VITE_FIREBASE_API_KEY=your-api-key  # Keep placeholder
+```
+Data stored in `localStorage`, starts with empty state.
+
+#### Option 3: Firebase Mode (Production)
+Full setup guide: **[FIREBASE_SETUP.md](./FIREBASE_SETUP.md)**
+
+1. Create a Firebase project
+2. Enable Firestore + Google Authentication
+3. Deploy security rules: `firebase deploy --only firestore`
+4. Configure `.env` with your Firebase credentials
+
+```env
+VITE_FIREBASE_API_KEY=actual-api-key-from-firebase
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+# ... etc
+VITE_DEBUG_MODE=false
+```
 
 ### Development
 ```bash
@@ -38,12 +76,42 @@ npm run preview  # preview the production build
 
 ---
 
-## Project Summary
+## 🎮 Debug Mode Details
+
+Debug mode is designed for **rapid development and testing**:
+
+- **Auto-initialization**: Mock data loads automatically on first run
+- **Persistent**: Data persists across browser refreshes (stored in localStorage)
+- **Realistic**: Uses real MTG commander cards with Scryfall images
+- **Complete**: Includes players, decks, finished games, and analytics data
+
+### Clear Mock Data
+To reset and regenerate:
+```javascript
+// In browser console
+localStorage.clear();
+location.reload();
+```
+
+### Debug Mode vs Local Mode vs Firebase Mode
+
+| Feature | Debug Mode | Local Mode | Firebase Mode |
+|---------|-----------|-----------|---------------|
+| Data Storage | localStorage | localStorage | Firestore |
+| Authentication | None | None | Google Sign-In |
+| Initial Data | Auto-populated | Empty | Empty |
+| Persistence | Browser only | Browser only | Cloud sync |
+| Multi-device | ❌ | ❌ | ✅ |
+
+---
+
+## 🏗️ Project Summary
 
 ### Tech Stack
 - **SvelteKit 2** + **Svelte 5** (runes) + **TypeScript**
 - **Firebase** — Authentication (Google sign-in) + Firestore (players, decks, games, logs)
 - **Scryfall API** — Commander card image & color identity lookup with autocomplete
+- **Chart.js** — Analytics charts and visualizations
 - **PWA** — Service worker for offline caching, web app manifest for installability
 
 ### Architecture

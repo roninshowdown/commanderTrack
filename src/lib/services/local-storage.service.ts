@@ -7,12 +7,14 @@
 import type { Player, Deck, GameRecord, LogEntry } from '$lib/models/types';
 import type { DataService } from './data-service.interface';
 import { uid } from '$lib/utils/format';
+import { generateFullMockDataSet } from './mock-data';
 
 const KEYS = {
 	players: 'ct_players',
 	decks: 'ct_decks',
 	games: 'ct_games',
-	logs: 'ct_logs'
+	logs: 'ct_logs',
+	mockDataInitialized: 'ct_mock_initialized'
 } as const;
 
 function load<T>(key: string): T[] {
@@ -28,8 +30,39 @@ function save<T>(key: string, data: T[]): void {
 	localStorage.setItem(key, JSON.stringify(data));
 }
 
+function isDebugMode(): boolean {
+	return import.meta.env.VITE_DEBUG_MODE === 'true';
+}
+
 export class LocalStorageService implements DataService {
+	constructor() {
+		// Auto-initialize mock data in debug mode (only once)
+		if (isDebugMode() && !localStorage.getItem(KEYS.mockDataInitialized)) {
+			this.initializeMockData();
+		}
+	}
+
+	private initializeMockData(): void {
+		console.log('🎮 DEBUG MODE: Initializing mock data...');
+		const mockData = generateFullMockDataSet();
+
+		save(KEYS.players, mockData.players);
+		save(KEYS.decks, mockData.decks);
+		save(KEYS.games, mockData.gameRecords);
+		save(KEYS.logs, mockData.logEntries);
+
+		localStorage.setItem(KEYS.mockDataInitialized, 'true');
+
+		console.log('✅ Mock data loaded:', {
+			players: mockData.players.length,
+			decks: mockData.decks.length,
+			games: mockData.gameRecords.length,
+			logs: mockData.logEntries.length
+		});
+	}
+
 	/* ─── Players ─── */
+	// ...existing code...
 
 	async getPlayers(): Promise<Player[]> {
 		return load<Player>(KEYS.players);

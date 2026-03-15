@@ -2,6 +2,7 @@
 	import { authUser } from '$lib/firebase/auth';
 	import { isFirebaseConfigured } from '$lib/services/data-service';
 	import Button from '$lib/components/ui/Button.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
 
 	const localMode = !isFirebaseConfigured();
 	let user = $derived($authUser);
@@ -9,28 +10,28 @@
 </script>
 
 <div class="admin-page">
-	<h1>Admin</h1>
-	<p class="description">Manage your players and decks</p>
+	<h1 class="page-title">ADMIN</h1>
+	<p class="page-desc">Manage your players and decks</p>
 
 	{#if hasAccess}
 		<div class="admin-grid">
 			<a href="/admin/players" class="admin-card">
-				<span class="card-icon">👤</span>
-				<span class="card-title">Players</span>
-				<span class="card-desc">Add, edit, or remove players</span>
+				<span class="card-icon"><Icon name="user" size={32} color="var(--color-secondary)" /></span>
+				<span class="card-title">PLAYERS</span>
+				<span class="card-desc">Add, edit, or remove</span>
 			</a>
 			<a href="/admin/decks" class="admin-card">
-				<span class="card-icon">🃏</span>
-				<span class="card-title">Decks</span>
-				<span class="card-desc">Manage commander decks</span>
+				<span class="card-icon"><Icon name="deck" size={32} color="var(--color-secondary)" /></span>
+				<span class="card-title">DECKS</span>
+				<span class="card-desc">Commander decks</span>
 			</a>
 		</div>
 	{:else}
 		<div class="auth-required">
-			<p>Please sign in to access admin features.</p>
+			<p>Sign in to access admin features.</p>
 			<a href="/">
 				<Button variant="primary">
-					{#snippet children()}Go to Home{/snippet}
+					{#snippet children()}GO HOME{/snippet}
 				</Button>
 			</a>
 		</div>
@@ -39,55 +40,66 @@
 
 <style>
 	.admin-page {
-		padding-top: var(--space-lg);
+		padding-top: var(--space-md);
 	}
 
-	h1 {
-		font-size: 1.8rem;
-		font-weight: 800;
+	.page-title {
+		font-size: 1.4rem;
+		font-weight: 900;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--color-primary);
 	}
 
-	.description {
-		color: var(--color-text-secondary);
+	.page-desc {
+		color: var(--color-text-muted);
+		font-size: 0.8rem;
 		margin-top: var(--space-xs);
 		margin-bottom: var(--space-xl);
+		letter-spacing: 0.02em;
 	}
 
 	.admin-grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: var(--space-md);
+		grid-template-columns: 1fr 1fr;
+		gap: var(--space-sm);
 	}
 
 	.admin-card {
 		display: flex;
 		flex-direction: column;
+		align-items: center;
 		gap: var(--space-sm);
-		padding: var(--space-xl);
+		padding: var(--space-xl) var(--space-lg);
 		background: var(--color-surface);
-		border-radius: var(--radius-lg);
+		border: 1px solid var(--color-surface-elevated);
+		border-radius: var(--radius-xl);
 		text-decoration: none;
 		color: var(--color-text);
 		transition: all var(--transition-fast);
+		text-align: center;
 	}
 
 	.admin-card:hover {
-		background: var(--color-surface-elevated);
+		border-color: var(--neon-cyan);
+		box-shadow: var(--glow-cyan);
 		transform: translateY(-2px);
-		box-shadow: var(--shadow-md);
 	}
 
 	.card-icon {
-		font-size: 2.5rem;
+		display: flex;
+		justify-content: center;
 	}
 
 	.card-title {
-		font-size: 1.2rem;
-		font-weight: 700;
+		font-size: 0.85rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
 	}
 
 	.card-desc {
-		font-size: 0.8rem;
+		font-size: 0.7rem;
 		color: var(--color-text-muted);
 	}
 
@@ -104,4 +116,3 @@
 		color: var(--color-text-secondary);
 	}
 </style>
-

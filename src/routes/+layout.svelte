@@ -3,42 +3,31 @@
 	import { authUser } from '$lib/firebase/auth';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
+	import Icon from '$lib/components/ui/Icon.svelte';
+	import '$lib/utils/debug'; // Activate debug mode utilities
 
 	let { children } = $props();
 
 	let currentPath = $derived($page.url.pathname);
+	let isHome = $derived(currentPath === '/');
 
 	onMount(() => {
 		authUser.init();
 	});
-
-	const navItems = [
-		{ href: '/', label: 'Home', icon: '🏠' },
-		{ href: '/setup', label: 'Setup', icon: '🎮' },
-		{ href: '/game', label: 'Game', icon: '⚔️' },
-		{ href: '/admin', label: 'Admin', icon: '⚙️' },
-		{ href: '/log', label: 'Log', icon: '📋' },
-		{ href: '/rank', label: 'Rank', icon: '🏆' }
-	];
 </script>
 
 <div class="app-shell">
-	<main class="app-main">
+	{#if !isHome}
+		<header class="top-bar animate-fade-in">
+			<a href="/" class="back-btn">
+				<Icon name="back" size={20} />
+				<span>Menu</span>
+			</a>
+		</header>
+	{/if}
+	<main class="app-main" class:has-header={!isHome}>
 		{@render children()}
 	</main>
-
-	<nav class="bottom-nav">
-		{#each navItems as item}
-			<a
-				href={item.href}
-				class="nav-item"
-				class:active={currentPath === item.href}
-			>
-				<span class="nav-icon">{item.icon}</span>
-				<span class="nav-label">{item.label}</span>
-			</a>
-		{/each}
-	</nav>
 </div>
 
 <style>
@@ -48,63 +37,51 @@
 		min-height: 100dvh;
 	}
 
+	.top-bar {
+		position: sticky;
+		top: 0;
+		z-index: 100;
+		display: flex;
+		align-items: center;
+		padding: var(--space-sm) var(--space-md);
+		padding-top: calc(var(--space-sm) + env(safe-area-inset-top, 0px));
+		background: rgba(10, 10, 15, 0.85);
+		backdrop-filter: blur(16px);
+		-webkit-backdrop-filter: blur(16px);
+		border-bottom: 1px solid var(--color-surface-elevated);
+	}
+
+	.back-btn {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--color-primary);
+		text-decoration: none;
+		font-weight: 700;
+		font-size: 0.85rem;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		padding: var(--space-xs) var(--space-sm);
+		border-radius: var(--radius-sm);
+		transition: all var(--transition-fast);
+		min-height: 44px;
+	}
+
+	.back-btn:hover {
+		background: var(--color-primary-dim);
+	}
+
 	.app-main {
 		flex: 1;
 		padding: var(--space-md);
-		padding-bottom: calc(60px + var(--space-md) + env(safe-area-inset-bottom, 0px));
-		max-width: 900px;
+		padding-bottom: calc(var(--space-lg) + env(safe-area-inset-bottom, 0px));
+		max-width: 600px;
 		margin: 0 auto;
 		width: 100%;
+		overflow-x: hidden;
 	}
 
-	.bottom-nav {
-		position: fixed;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		display: flex;
-		justify-content: space-around;
-		align-items: center;
-		height: 60px;
-		background: var(--color-surface);
-		border-top: 1px solid var(--color-surface-elevated);
-		padding-bottom: env(safe-area-inset-bottom, 0px);
-		z-index: 100;
-		backdrop-filter: blur(20px);
-		-webkit-backdrop-filter: blur(20px);
-	}
-
-	.nav-item {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 2px;
-		padding: var(--space-xs) var(--space-sm);
-		color: var(--color-text-muted);
-		text-decoration: none;
-		transition: color var(--transition-fast);
-		border-radius: var(--radius-sm);
-		min-width: 56px;
-	}
-
-	.nav-item.active {
-		color: var(--color-primary);
-	}
-
-	.nav-item:hover {
-		color: var(--color-text);
-	}
-
-	.nav-icon {
-		font-size: 1.2rem;
-		line-height: 1;
-	}
-
-	.nav-label {
-		font-size: 0.6rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+	.app-main.has-header {
+		padding-top: var(--space-sm);
 	}
 </style>
-

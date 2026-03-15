@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { GamePlayerState } from '$lib/models/types';
 	import { formatTime } from '$lib/utils/format';
+	import Icon from '$lib/components/ui/Icon.svelte';
 
 	interface Props {
 		player: GamePlayerState;
@@ -59,13 +60,7 @@
 		}
 	}
 
-	const colorSymbols: Record<string, string> = {
-		white: '⚪',
-		blue: '🔵',
-		black: '⚫',
-		red: '🔴',
-		green: '🟢'
-	};
+	// No longer using emoji color symbols - SVG ColorPip is used instead
 </script>
 
 <div
@@ -125,7 +120,7 @@
 			</div>
 		{:else}
 			<div class="dead-overlay">
-				<span class="dead-icon">💀</span>
+				<span class="dead-icon"><Icon name="skull" size={36} color="var(--color-danger)" /></span>
 				<span class="dead-text">DEAD</span>
 			</div>
 		{/if}
@@ -158,21 +153,21 @@
 		border-radius: var(--radius-lg);
 		overflow: hidden;
 		background: var(--color-surface);
-		border: 2px solid transparent;
+		border: 1px solid var(--color-surface-elevated);
 		transition: all var(--transition-normal);
 		cursor: pointer;
-		min-height: 160px;
+		min-height: 180px;
 		display: flex;
 		flex-direction: column;
 	}
 
 	.player-tile.active {
-		border-color: var(--color-success);
-		box-shadow: var(--shadow-glow-success);
+		border-color: rgba(0, 230, 118, 0.5);
+		box-shadow: var(--glow-success);
 	}
 
 	.player-tile.ticking {
-		border-color: var(--color-danger);
+		border-color: var(--neon-red);
 	}
 
 	.player-tile.pulsing {
@@ -180,7 +175,7 @@
 	}
 
 	.player-tile.dead {
-		opacity: 0.5;
+		opacity: 0.4;
 		filter: grayscale(0.8);
 		pointer-events: none;
 	}
@@ -190,8 +185,8 @@
 	}
 
 	.player-tile.cmd-source {
-		border-color: var(--color-warning);
-		box-shadow: 0 0 16px rgba(255, 165, 2, 0.4);
+		border-color: rgba(255, 171, 0, 0.6);
+		box-shadow: 0 0 16px rgba(255, 171, 0, 0.3);
 	}
 
 	.tile-bg {
@@ -199,7 +194,7 @@
 		inset: 0;
 		background-size: cover;
 		background-position: center top;
-		opacity: 0.25;
+		opacity: 0.2;
 		z-index: 0;
 	}
 
@@ -216,19 +211,19 @@
 	.player-info {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: 1px;
 	}
 
 	.player-name {
-		font-size: 0.8rem;
-		font-weight: 700;
+		font-size: 0.75rem;
+		font-weight: 800;
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.08em;
 	}
 
 	.commander-name {
-		font-size: 0.65rem;
-		color: var(--color-text-secondary);
+		font-size: 0.6rem;
+		color: var(--color-text-muted);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -243,10 +238,10 @@
 	}
 
 	.life-btn {
-		width: 44px;
-		height: 44px;
+		width: 48px;
+		height: 48px;
 		border-radius: var(--radius-full);
-		font-size: 1.4rem;
+		font-size: 1.5rem;
 		font-weight: 700;
 		display: flex;
 		align-items: center;
@@ -254,25 +249,30 @@
 		transition: all var(--transition-fast);
 		-webkit-tap-highlight-color: transparent;
 		touch-action: manipulation;
+		border: 1px solid transparent;
 	}
 
 	.life-btn.decrease {
-		background: rgba(255, 71, 87, 0.2);
+		background: rgba(255, 23, 68, 0.1);
 		color: var(--color-danger);
+		border-color: rgba(255, 23, 68, 0.2);
 	}
 
 	.life-btn.decrease:active {
-		background: rgba(255, 71, 87, 0.4);
+		background: rgba(255, 23, 68, 0.3);
+		box-shadow: var(--glow-danger);
 		transform: scale(0.9);
 	}
 
 	.life-btn.increase {
-		background: rgba(46, 213, 115, 0.2);
+		background: rgba(0, 230, 118, 0.1);
 		color: var(--color-success);
+		border-color: rgba(0, 230, 118, 0.2);
 	}
 
 	.life-btn.increase:active {
-		background: rgba(46, 213, 115, 0.4);
+		background: rgba(0, 230, 118, 0.3);
+		box-shadow: var(--glow-success);
 		transform: scale(0.9);
 	}
 
@@ -283,10 +283,11 @@
 	}
 
 	.life-value {
-		font-size: 2.2rem;
+		font-size: 2.5rem;
 		font-weight: 800;
 		line-height: 1;
 		font-variant-numeric: tabular-nums;
+		font-family: var(--font-mono);
 	}
 
 	.dead-overlay {
@@ -303,10 +304,11 @@
 	}
 
 	.dead-text {
-		font-size: 0.9rem;
+		font-size: 0.8rem;
 		font-weight: 800;
 		color: var(--color-danger);
-		letter-spacing: 0.1em;
+		letter-spacing: 0.15em;
+		text-transform: uppercase;
 	}
 
 	.tile-footer {
@@ -317,28 +319,30 @@
 	}
 
 	.pool-time {
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		font-family: var(--font-mono);
-		color: var(--color-text-secondary);
+		color: var(--color-text-muted);
 	}
 
 	.status-badge {
-		font-size: 0.6rem;
-		font-weight: 700;
+		font-size: 0.55rem;
+		font-weight: 800;
 		text-transform: uppercase;
-		padding: 2px 6px;
-		border-radius: var(--radius-sm);
-		letter-spacing: 0.05em;
+		padding: 2px 8px;
+		border-radius: var(--radius-full);
+		letter-spacing: 0.06em;
 	}
 
 	.active-badge {
-		background: rgba(46, 213, 115, 0.2);
+		background: rgba(0, 230, 118, 0.12);
 		color: var(--color-success);
+		border: 1px solid rgba(0, 230, 118, 0.25);
 	}
 
 	.reactive-badge {
-		background: rgba(255, 165, 2, 0.2);
+		background: rgba(255, 171, 0, 0.12);
 		color: var(--color-warning);
+		border: 1px solid rgba(255, 171, 0, 0.25);
 	}
 
 	.cmd-damage-bar {
@@ -348,12 +352,13 @@
 	}
 
 	.cmd-dmg-pip {
-		font-size: 0.6rem;
-		background: rgba(233, 69, 96, 0.3);
+		font-size: 0.55rem;
+		background: var(--color-primary-dim);
 		color: var(--color-primary);
-		padding: 1px 5px;
-		border-radius: var(--radius-sm);
+		padding: 1px 6px;
+		border-radius: var(--radius-full);
 		font-weight: 700;
+		border: 1px solid var(--neon-red);
 	}
 </style>
 

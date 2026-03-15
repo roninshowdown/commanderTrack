@@ -25,6 +25,7 @@ import {
 } from '$lib/services/timer-engine';
 import { uid } from '$lib/utils/format';
 import { playGainSound, playLossSound, playCriticalSound, playTurnEndSound } from '$lib/utils/sounds';
+import { getDataServiceSync } from '$lib/services/data-service';
 
 /** Internal writable store */
 const _gameState = writable<GameState | null>(null);
@@ -72,6 +73,14 @@ export function initGame(
 ): void {
 	stopTimer();
 	_logEntries.set([]);
+	clearCommanderDamageMode();
+
+	if (!setupPlayers || setupPlayers.length === 0) {
+		console.error('[gameStore] initGame called with no players!');
+		return;
+	}
+
+	console.log('[gameStore] initGame:', { players: setupPlayers.length, config: config.id });
 
 	const tc = config.timerConfig;
 	const poolTime = tc.poolTimeSeconds;
@@ -193,10 +202,15 @@ export function changeLife(playerIndex: number, amount: number): void {
 			player.life = 0;
 		}
 
-		addLogEntryLocal(next.config.id, player.playerId, player.playerName, amount, 'life');
-
 		return next;
 	});
+
+	// Log entry AFTER state update to avoid nested store mutations
+	const state = get(_gameState);
+	if (state) {
+		const player = state.players[playerIndex];
+		addLogEntryLocal(state.config.id, player.playerId, player.playerName, amount, 'life');
+	}
 }
 
 export function applyCommanderDamage(
@@ -234,17 +248,23 @@ export function applyCommanderDamage(
 			target.life = 0;
 		}
 
+		return next;
+	});
+
+	// Log entry AFTER state update to avoid nested store mutations
+	const state = get(_gameState);
+	if (state) {
+		const source = state.players[sourcePlayerIndex];
+		const target = state.players[targetPlayerIndex];
 		addLogEntryLocal(
-			next.config.id,
+			state.config.id,
 			target.playerId,
 			target.playerName,
 			-amount,
 			'commander_damage',
 			source.playerId
 		);
-
-		return next;
-	});
+	}
 }
 
 /* ─── Commander damage mode ─── */
@@ -273,6 +293,23 @@ export function finishGame(winnerId: string): void {
 	stopTimer();
 	_gameState.update((state) => {
 		if (!state) return state;
+
+		// Persist game record to storage — fire-and-forget
+		try {
+			const ds = getDataServiceSync();
+			ds.saveGameRecord({
+				playerIds: state.players.map((p) => p.playerId),
+				deckIds: state.players.map((p) => p.deckId),
+				maxLife: state.config.maxLife,
+				timerVariant: state.config.timerConfig.variant,
+				winnerId,
+				createdAt: state.config.createdAt,
+				finishedAt: Date.now()
+			});
+		} catch (e) {
+			console.warn('Failed to persist game record:', e);
+		}
+
 		return { ...state, isFinished: true, isRunning: false, winnerId };
 	});
 }
@@ -332,6 +369,22 @@ function addLogEntryLocal(
 	};
 
 	_logEntries.update((entries) => [entry, ...entries]);
+
+	// Fire-and-forget persistence — never let storage errors crash the game
+	try {
+		const ds = getDataServiceSync();
+		ds.addLogEntry({
+			gameId: entry.gameId,
+			playerId: entry.playerId,
+			playerName: entry.playerName,
+			value: entry.value,
+			type: entry.type,
+			sourcePlayerId: entry.sourcePlayerId,
+			timestamp: entry.timestamp
+		});
+	} catch (e) {
+		console.warn('Failed to persist log entry:', e);
+	}
 }
 
 

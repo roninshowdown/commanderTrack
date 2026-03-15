@@ -2,11 +2,12 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { Player, Deck, GameConfig, TimerConfig, TimerConfigA, TimerConfigB } from '$lib/models/types';
-	import { getDataService } from '$lib/services/data-service';
+	import { getDataService, isFirebaseConfigured } from '$lib/services/data-service';
 	import { initGame } from '$lib/stores/gameStore';
 	import { uid } from '$lib/utils/format';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
 
 	let players = $state<Player[]>([]);
 	let loading = $state(true);
@@ -33,26 +34,53 @@
 	let selectedDecks = $state<(string | null)[]>(Array(6).fill(null));
 	let playerDecksCache = $state<Record<string, Deck[]>>({});
 
-	onMount(async () => {
+	/** Wrap a promise with a timeout so we never hang */
+	function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+		return Promise.race([
+			promise,
+			new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
+		]);
+	}
+
+	async function loadPlayers(): Promise<void> {
 		try {
 			const ds = await getDataService();
-			players = await ds.getPlayers();
+			players = await withTimeout(ds.getPlayers(), 8000, []);
+			if (players.length === 0 && isFirebaseConfigured()) {
+				toast = { message: 'No players found. Please sign in first or add players in Admin.', type: 'error' };
+			}
+			// Preload ALL decks to avoid async race conditions in the deck dropdown
+			if (players.length > 0) {
+				const allDecks = await withTimeout(ds.getDecks(), 8000, []);
+				const cache: Record<string, Deck[]> = {};
+				for (const p of players) {
+					cache[p.id] = allDecks.filter((d) => d.playerId === p.id);
+				}
+				playerDecksCache = cache;
+			}
 		} catch (e) {
+			console.error('Setup: Failed to load players', e);
 			toast = { message: 'Failed to load players', type: 'error' };
 		}
 		loading = false;
+	}
+
+	onMount(() => {
+		loadPlayers();
 	});
 
 	async function onPlayerSelect(index: number, playerId: string) {
 		selectedPlayers[index] = playerId;
 		selectedDecks[index] = null;
 
-		if (!playerDecksCache[playerId]) {
+		// Decks are preloaded, but if missing (e.g. new player added during session), fetch them
+		if (playerId && !playerDecksCache[playerId]) {
 			try {
 				const ds = await getDataService();
-				playerDecksCache[playerId] = await ds.getDecksForPlayer(playerId);
+				const decks = await ds.getDecksForPlayer(playerId);
+				playerDecksCache = { ...playerDecksCache, [playerId]: decks };
 			} catch {
-				playerDecksCache[playerId] = [];
+				playerDecksCache = { ...playerDecksCache, [playerId]: [] };
 			}
 		}
 	}
@@ -67,6 +95,18 @@
 		return players.find((p) => p.id === pid)?.name ?? '';
 	}
 
+	function getAvailablePlayers(slotIndex: number): Player[] {
+		const currentSelection = selectedPlayers[slotIndex];
+		return players.filter((p) => {
+			if (p.id === currentSelection) return true;
+			// Exclude players already selected in other slots
+			for (let i = 0; i < playerCount; i++) {
+				if (i !== slotIndex && selectedPlayers[i] === p.id) return false;
+			}
+			return true;
+		});
+	}
+
 	function startGame() {
 		const setupPlayers = [];
 
@@ -76,6 +116,7 @@
 
 			if (!pid || !did) {
 				toast = { message: `Please select player and deck for slot ${i + 1}`, type: 'error' };
+				console.warn('[setup] Missing player or deck at slot', i + 1, { pid, did });
 				return;
 			}
 
@@ -161,7 +202,7 @@
 							onchange={(e) => onPlayerSelect(i, (e.target as HTMLSelectElement).value)}
 						>
 							<option value="">Select player...</option>
-							{#each players as p}
+							{#each getAvailablePlayers(i) as p}
 								<option value={p.id}>{p.name}</option>
 							{/each}
 						</select>
@@ -221,35 +262,35 @@
 			{#if timerVariant === 'A'}
 				<div class="timer-fields">
 					<div class="field">
-						<label>Pool Time (minutes)</label>
-						<input type="number" bind:value={poolTimeMinutes} min="1" max="120" />
+						<label for="pool-time-a">Pool Time (minutes)</label>
+						<input id="pool-time-a" type="number" bind:value={poolTimeMinutes} min="1" max="120" />
 					</div>
 					<div class="field">
-						<label>Shared Start Time (minutes)</label>
-						<input type="number" bind:value={sharedStartMinutes} min="1" max="60" />
+						<label for="shared-start">Shared Start Time (minutes)</label>
+						<input id="shared-start" type="number" bind:value={sharedStartMinutes} min="1" max="60" />
 					</div>
 				</div>
 			{:else}
 				<div class="timer-fields">
 					<div class="field">
-						<label>Pool Time (minutes)</label>
-						<input type="number" bind:value={poolTimeMinutesB} min="1" max="120" />
+						<label for="pool-time-b">Pool Time (minutes)</label>
+						<input id="pool-time-b" type="number" bind:value={poolTimeMinutesB} min="1" max="120" />
 					</div>
 					<div class="field">
-						<label>Player Time (minutes)</label>
-						<input type="number" bind:value={playerTimeMinutes} min="0.5" max="30" step="0.5" />
+						<label for="player-time">Player Time (minutes)</label>
+						<input id="player-time" type="number" bind:value={playerTimeMinutes} min="0.5" max="30" step="0.5" />
 					</div>
 					<div class="field">
-						<label>Reaction Time (minutes)</label>
-						<input type="number" bind:value={reactionTimeMinutes} min="0.5" max="30" step="0.5" />
+						<label for="reaction-time">Reaction Time (minutes)</label>
+						<input id="reaction-time" type="number" bind:value={reactionTimeMinutes} min="0.5" max="30" step="0.5" />
 					</div>
 					<div class="field">
-						<label>Scale Player Time (seconds/round)</label>
-						<input type="number" bind:value={scalePlayerSeconds} min="0" max="60" />
+						<label for="scale-player">Scale Player Time (seconds/round)</label>
+						<input id="scale-player" type="number" bind:value={scalePlayerSeconds} min="0" max="60" />
 					</div>
 					<div class="field">
-						<label>Scale Reaction Time (seconds/round)</label>
-						<input type="number" bind:value={scaleReactionSeconds} min="0" max="60" />
+						<label for="scale-reaction">Scale Reaction Time (seconds/round)</label>
+						<input id="scale-reaction" type="number" bind:value={scaleReactionSeconds} min="0" max="60" />
 					</div>
 				</div>
 			{/if}
@@ -258,7 +299,7 @@
 		<!-- Start Game -->
 		<section class="section start-section">
 			<Button variant="primary" size="lg" fullWidth onclick={startGame}>
-				{#snippet children()}🎮 Start Game{/snippet}
+				{#snippet children()}<Icon name="play" size={16} /> Start Game{/snippet}
 			</Button>
 		</section>
 	{/if}
@@ -270,12 +311,15 @@
 
 <style>
 	.setup-page {
-		padding-top: var(--space-lg);
+		padding-top: var(--space-md);
 	}
 
 	h1 {
-		font-size: 1.8rem;
-		font-weight: 800;
+		font-size: 1.4rem;
+		font-weight: 900;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--color-primary);
 		margin-bottom: var(--space-xl);
 	}
 
@@ -284,12 +328,12 @@
 	}
 
 	h2 {
-		font-size: 1rem;
-		font-weight: 700;
+		font-size: 0.75rem;
+		font-weight: 800;
 		margin-bottom: var(--space-md);
-		color: var(--color-text-secondary);
+		color: var(--color-secondary);
 		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		letter-spacing: 0.1em;
 	}
 
 	.count-selector, .life-options {
@@ -303,6 +347,7 @@
 		height: 48px;
 		border-radius: var(--radius-md);
 		background: var(--color-surface);
+		border: 1px solid var(--color-surface-elevated);
 		font-size: 1.1rem;
 		font-weight: 700;
 		transition: all var(--transition-fast);
@@ -311,6 +356,8 @@
 	.count-btn.active {
 		background: var(--color-primary);
 		color: white;
+		border-color: var(--color-primary-light);
+		box-shadow: var(--glow-primary);
 	}
 
 	.player-slots {
@@ -327,15 +374,18 @@
 	}
 
 	.slot-label {
-		width: 50px;
-		font-size: 0.8rem;
-		font-weight: 600;
+		width: 100%;
+		font-size: 0.7rem;
+		font-weight: 700;
 		color: var(--color-text-muted);
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 	}
 
 	.player-slot select {
 		flex: 1;
-		min-width: 120px;
+		min-width: 0;
+		min-height: 44px;
 	}
 
 	.variant-tabs {
@@ -347,33 +397,35 @@
 	.variant-tab {
 		flex: 1;
 		padding: var(--space-md);
-		border-radius: var(--radius-md);
+		border-radius: var(--radius-lg);
 		background: var(--color-surface);
+		border: 1px solid var(--color-surface-elevated);
 		text-align: left;
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
 		transition: all var(--transition-fast);
-		border: 2px solid transparent;
 	}
 
 	.variant-tab.active {
-		border-color: var(--color-primary);
-		background: var(--color-surface-elevated);
+		border-color: var(--neon-red);
+		background: var(--color-primary-dim);
+		box-shadow: var(--glow-primary);
 	}
 
 	.variant-tab strong {
-		font-size: 0.9rem;
+		font-size: 0.85rem;
+		letter-spacing: 0.04em;
 	}
 
 	.variant-tab span {
-		font-size: 0.7rem;
+		font-size: 0.65rem;
 		color: var(--color-text-muted);
 	}
 
 	.timer-fields {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 		gap: var(--space-md);
 	}
 
@@ -384,9 +436,11 @@
 	}
 
 	.field label {
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: var(--color-text-secondary);
+		font-size: 0.7rem;
+		font-weight: 700;
+		color: var(--color-text-muted);
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
 	}
 
 	.start-section {
@@ -396,7 +450,9 @@
 	.loading {
 		text-align: center;
 		padding: var(--space-2xl);
-		color: var(--color-text-secondary);
+		color: var(--color-text-muted);
+		font-size: 0.85rem;
+		letter-spacing: 0.04em;
 	}
 </style>
 

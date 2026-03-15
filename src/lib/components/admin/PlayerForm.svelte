@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Player } from '$lib/models/types';
 	import Button from '$lib/components/ui/Button.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
 	import { searchCommander } from '$lib/services/scryfall';
 
 	interface Props {
@@ -42,7 +43,7 @@
 		<div class="image-row">
 			<input id="player-image" type="text" bind:value={imageUrl} placeholder="Image URL (optional)" />
 			<Button variant="ghost" size="sm" onclick={searchImage} disabled={searching}>
-				{#snippet children()}{searching ? '...' : '🔍'}{/snippet}
+				{#snippet children()}{#if searching}...{:else}<Icon name="search" size={16} />{/if}{/snippet}
 			</Button>
 		</div>
 		{#if imageUrl}

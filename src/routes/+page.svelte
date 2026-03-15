@@ -2,67 +2,83 @@
 	import { authUser, signIn, signOut } from '$lib/firebase/auth';
 	import { isFirebaseConfigured } from '$lib/services/data-service';
 	import Button from '$lib/components/ui/Button.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
 
 	let user = $derived($authUser);
 	const localMode = !isFirebaseConfigured();
 </script>
 
 <div class="home-page">
+	<!-- Title -->
 	<div class="hero animate-fade-in">
-		<div class="logo">⚔️</div>
-		<h1>Commander Track</h1>
-		<p class="subtitle">Magic the Gathering Life & Timer Tracker</p>
+		<div class="logo-ring">
+			<Icon name="swords" size={44} color="var(--color-primary)" />
+		</div>
+		<h1 class="title">COMMANDER<br /><span class="title-accent">TRACK</span></h1>
+		<p class="subtitle">LIFE · TIMER · ANALYTICS</p>
 	</div>
 
+	<!-- Auth -->
 	<div class="auth-section animate-fade-in">
 		{#if localMode}
-			<div class="local-mode-badge">
-				<span>🖥️ Local Dev Mode</span>
-				<p>Data stored in browser localStorage</p>
+			<div class="chip chip-warn">
+				<Icon name="monitor" size={14} /> LOCAL MODE
 			</div>
 		{:else if user}
-			<div class="user-info">
+			<div class="user-row">
 				{#if user.photoURL}
 					<img src={user.photoURL} alt={user.displayName ?? 'User'} class="avatar" />
 				{/if}
-				<div>
-					<p class="user-name">{user.displayName ?? 'Player'}</p>
-					<p class="user-email">{user.email}</p>
-				</div>
+				<span class="user-name">{user.displayName ?? 'Player'}</span>
+				<button class="link-btn" onclick={signOut}>
+					<Icon name="sign-out" size={14} /> Sign Out
+				</button>
 			</div>
-			<Button variant="ghost" size="sm" onclick={signOut}>
-				{#snippet children()}Sign Out{/snippet}
-			</Button>
 		{:else}
 			<Button variant="primary" size="lg" fullWidth onclick={signIn}>
-				{#snippet children()}🔑 Sign in with Google{/snippet}
+				{#snippet children()}<Icon name="sign-in" size={16} /> SIGN IN{/snippet}
 			</Button>
-			<p class="auth-hint">Sign in to save players, decks, and game history</p>
 		{/if}
 	</div>
 
-	<div class="quick-actions animate-fade-in">
-		<a href="/setup" class="action-card">
-			<span class="action-icon">🎮</span>
-			<span class="action-label">New Game</span>
-			<span class="action-desc">Start tracking life & timer</span>
+	<!-- Main nav grid -->
+	<nav class="nav-grid animate-fade-in">
+		<a href="/setup" class="nav-card nav-card--primary">
+			<div class="nav-card-icon"><Icon name="play" size={28} /></div>
+			<div class="nav-card-content">
+				<span class="nav-card-label">NEW GAME</span>
+				<span class="nav-card-desc">Start tracking</span>
+			</div>
 		</a>
-		<a href="/admin" class="action-card">
-			<span class="action-icon">⚙️</span>
-			<span class="action-label">Admin</span>
-			<span class="action-desc">Manage players & decks</span>
+		<a href="/game" class="nav-card">
+			<div class="nav-card-icon"><Icon name="swords" size={24} /></div>
+			<div class="nav-card-content">
+				<span class="nav-card-label">GAME</span>
+				<span class="nav-card-desc">Current match</span>
+			</div>
 		</a>
-		<a href="/log" class="action-card">
-			<span class="action-icon">📋</span>
-			<span class="action-label">Game Log</span>
-			<span class="action-desc">View life change history</span>
+		<a href="/log" class="nav-card">
+			<div class="nav-card-icon"><Icon name="chart" size={24} /></div>
+			<div class="nav-card-content">
+				<span class="nav-card-label">ANALYTICS</span>
+				<span class="nav-card-desc">Stats & charts</span>
+			</div>
 		</a>
-		<a href="/rank" class="action-card">
-			<span class="action-icon">🏆</span>
-			<span class="action-label">Rankings</span>
-			<span class="action-desc">Player & deck stats</span>
+		<a href="/rank" class="nav-card">
+			<div class="nav-card-icon"><Icon name="trophy" size={24} /></div>
+			<div class="nav-card-content">
+				<span class="nav-card-label">RANKINGS</span>
+				<span class="nav-card-desc">Leaderboard</span>
+			</div>
 		</a>
-	</div>
+		<a href="/admin" class="nav-card">
+			<div class="nav-card-icon"><Icon name="settings" size={24} /></div>
+			<div class="nav-card-content">
+				<span class="nav-card-label">ADMIN</span>
+				<span class="nav-card-desc">Players & decks</span>
+			</div>
+		</a>
+	</nav>
 </div>
 
 <style>
@@ -71,133 +87,174 @@
 		flex-direction: column;
 		align-items: center;
 		gap: var(--space-xl);
-		padding-top: var(--space-2xl);
+		padding-top: calc(env(safe-area-inset-top, 0px) + var(--space-2xl));
+		min-height: 100dvh;
 	}
 
+	/* Hero */
 	.hero {
 		text-align: center;
-	}
-
-	.logo {
-		font-size: 4rem;
-		margin-bottom: var(--space-md);
-	}
-
-	h1 {
-		font-size: 2rem;
-		font-weight: 800;
-		letter-spacing: -0.02em;
-	}
-
-	.subtitle {
-		color: var(--color-text-secondary);
-		font-size: 0.95rem;
-		margin-top: var(--space-xs);
-	}
-
-	.auth-section {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: var(--space-sm);
-		width: 100%;
-		max-width: 320px;
 	}
 
-	.user-info {
+	.logo-ring {
+		width: 80px;
+		height: 80px;
+		border-radius: var(--radius-xl);
+		border: 2px solid var(--neon-red);
 		display: flex;
 		align-items: center;
-		gap: var(--space-md);
-		padding: var(--space-md);
-		background: var(--color-surface);
-		border-radius: var(--radius-md);
+		justify-content: center;
+		margin-bottom: var(--space-md);
+		box-shadow: var(--glow-primary);
+		background: var(--color-primary-dim);
+		animation: neon-flicker 6s infinite;
+	}
+
+	.title {
+		font-family: var(--font-display);
+		font-size: 1.6rem;
+		font-weight: 900;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		line-height: 1.15;
+		color: var(--color-text);
+	}
+
+	.title-accent {
+		color: var(--color-primary);
+		text-shadow: 0 0 20px rgba(232, 25, 59, 0.5);
+	}
+
+	.subtitle {
+		margin-top: var(--space-sm);
+		font-size: 0.65rem;
+		font-weight: 700;
+		letter-spacing: 0.25em;
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+	}
+
+	/* Auth */
+	.auth-section {
 		width: 100%;
+		max-width: 340px;
+	}
+
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 14px;
+		border-radius: var(--radius-full);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+	}
+
+	.chip-warn {
+		background: rgba(255, 171, 0, 0.12);
+		color: var(--color-warning);
+		border: 1px solid rgba(255, 171, 0, 0.25);
+	}
+
+	.user-row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		padding: var(--space-sm) var(--space-md);
+		background: var(--color-surface);
+		border-radius: var(--radius-lg);
+		border: 1px solid var(--color-surface-elevated);
 	}
 
 	.avatar {
-		width: 40px;
-		height: 40px;
+		width: 32px;
+		height: 32px;
 		border-radius: var(--radius-full);
 	}
 
 	.user-name {
+		flex: 1;
 		font-weight: 600;
-		font-size: 0.9rem;
+		font-size: 0.85rem;
 	}
 
-	.user-email {
-		font-size: 0.75rem;
-		color: var(--color-text-secondary);
-	}
-
-	.auth-hint {
-		font-size: 0.8rem;
-		color: var(--color-text-muted);
-		text-align: center;
-	}
-
-	.local-mode-badge {
+	.link-btn {
 		display: flex;
-		flex-direction: column;
 		align-items: center;
-		gap: var(--space-xs);
-		padding: var(--space-md) var(--space-lg);
-		background: var(--color-surface);
-		border: 1px dashed var(--color-warning);
-		border-radius: var(--radius-md);
-		width: 100%;
-		text-align: center;
-	}
-
-	.local-mode-badge span {
-		font-weight: 700;
-		color: var(--color-warning);
-	}
-
-	.local-mode-badge p {
-		font-size: 0.75rem;
+		gap: 4px;
+		font-size: 0.7rem;
 		color: var(--color-text-muted);
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		min-height: auto;
+		padding: var(--space-xs);
 	}
 
-	.quick-actions {
+	/* Nav grid */
+	.nav-grid {
 		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: var(--space-md);
+		grid-template-columns: 1fr 1fr;
+		gap: var(--space-sm);
 		width: 100%;
 		max-width: 400px;
 	}
 
-	.action-card {
+	.nav-card {
 		display: flex;
-		flex-direction: column;
 		align-items: center;
-		gap: var(--space-xs);
-		padding: var(--space-lg);
+		gap: var(--space-md);
+		padding: var(--space-md) var(--space-lg);
 		background: var(--color-surface);
+		border: 1px solid var(--color-surface-elevated);
 		border-radius: var(--radius-lg);
 		text-decoration: none;
 		color: var(--color-text);
 		transition: all var(--transition-fast);
-		text-align: center;
 	}
 
-	.action-card:hover {
-		background: var(--color-surface-elevated);
-		transform: translateY(-2px);
-		box-shadow: var(--shadow-md);
+	.nav-card:hover {
+		border-color: var(--neon-red);
+		box-shadow: var(--glow-primary);
+		transform: translateY(-1px);
 	}
 
-	.action-icon {
-		font-size: 2rem;
+	.nav-card--primary {
+		grid-column: 1 / -1;
+		background: var(--color-primary-dim);
+		border-color: var(--neon-red);
+		box-shadow: var(--glow-primary);
+		padding: var(--space-lg);
 	}
 
-	.action-label {
-		font-weight: 700;
-		font-size: 0.9rem;
+	.nav-card--primary .nav-card-icon {
+		color: var(--color-primary);
 	}
 
-	.action-desc {
-		font-size: 0.7rem;
+	.nav-card-icon {
+		flex-shrink: 0;
+		color: var(--color-secondary);
+		opacity: 0.85;
+	}
+
+	.nav-card-content {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.nav-card-label {
+		font-weight: 800;
+		font-size: 0.8rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+	}
+
+	.nav-card-desc {
+		font-size: 0.65rem;
 		color: var(--color-text-muted);
 	}
 </style>

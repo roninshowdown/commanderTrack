@@ -238,15 +238,27 @@ export function getCurrentTickingTime(state: GameState): number {
 	const phase = state.timerInfo.phase;
 	const targetPlayer = state.players[state.timerInfo.targetPlayerIndex];
 
+	if (!targetPlayer) return 0;
+
 	switch (phase) {
 		case 'SHARED_START':
 			return state.sharedStartTimeRemaining;
-		case 'PLAYER_TIME':
-			return targetPlayer?.playerTimeRemaining ?? targetPlayer?.poolTimeRemaining ?? 0;
+		case 'PLAYER_TIME': {
+			// Variant A uses pool time for the player-time phase (playerTimeRemaining is 0)
+			// Variant B uses the actual player time
+			const variant = state.config.timerConfig.variant;
+			if (variant === 'A') {
+				return targetPlayer.poolTimeRemaining;
+			}
+			// Variant B: show playerTime if it still has time, otherwise pool
+			return targetPlayer.playerTimeRemaining > 0
+				? targetPlayer.playerTimeRemaining
+				: targetPlayer.poolTimeRemaining;
+		}
 		case 'REACTION_TIME':
-			return targetPlayer?.reactionTimeRemaining ?? 0;
+			return targetPlayer.reactionTimeRemaining;
 		case 'POOL_TIME':
-			return targetPlayer?.poolTimeRemaining ?? 0;
+			return targetPlayer.poolTimeRemaining;
 		default:
 			return 0;
 	}

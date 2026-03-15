@@ -26,6 +26,7 @@
 	import TimerDisplay from '$lib/components/game/TimerDisplay.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
 
 	let game = $derived($gameState);
 	let running = $derived($isGameRunning);
@@ -120,13 +121,20 @@
 		<div class="no-game">
 			<p>No active game. Set up a new game to begin.</p>
 			<Button variant="primary" size="lg" onclick={() => goto('/setup')}>
-				{#snippet children()}🎮 Setup Game{/snippet}
+				{#snippet children()}<Icon name="setup" size={16} /> Setup Game{/snippet}
+			</Button>
+		</div>
+	{:else if !game.players || game.players.length === 0}
+		<div class="no-game">
+			<p>Game state is corrupted. Please start a new game.</p>
+			<Button variant="primary" size="lg" onclick={handleNewGame}>
+				{#snippet children()}<Icon name="setup" size={16} /> New Game{/snippet}
 			</Button>
 		</div>
 	{:else}
 		<!-- Player Tiles Grid -->
 		<div class="tiles-grid {getGridClass(game.players.length)}">
-			{#each game.players as player, i (player.playerId)}
+			{#each game.players as player, i (player.playerId ?? i)}
 				<PlayerTile
 					{player}
 					playerIndex={i}
@@ -158,12 +166,12 @@
 						onclick={toggleStartStop}
 					>
 						{#if game.timerInfo.phase === 'IDLE'}
-							▶ Start
-						{:else if running}
-							⏸ Pause
-						{:else}
-							▶ Resume
-						{/if}
+						<Icon name="play" size={16} /> Start
+					{:else if running}
+						<Icon name="pause" size={16} /> Pause
+					{:else}
+						<Icon name="play" size={16} /> Resume
+					{/if}
 					</button>
 
 					<!-- Next Turn -->
@@ -173,7 +181,7 @@
 						onclick={advanceNextTurn}
 						disabled={game.timerInfo.phase === 'IDLE'}
 					>
-						{#snippet children()}⏭ Next Turn{/snippet}
+						{#snippet children()}<Icon name="next" size={14} /> Next Turn{/snippet}
 					</Button>
 				</div>
 
@@ -181,13 +189,13 @@
 					<!-- Random Opponent -->
 					{#if game.config.timerConfig.variant === 'B'}
 						<Button variant="ghost" size="sm" onclick={pickRandomOpponent}>
-							{#snippet children()}🎲 Random Opponent{/snippet}
+							{#snippet children()}<Icon name="dice" size={14} /> Random{/snippet}
 						</Button>
 
 						<!-- Return Priority -->
 						{#if game.reactivePlayerIndex !== null}
 							<Button variant="ghost" size="sm" onclick={returnPriorityToActive}>
-								{#snippet children()}↩ Return to Active{/snippet}
+								{#snippet children()}<Icon name="return" size={14} /> Return{/snippet}
 							</Button>
 						{/if}
 					{/if}
@@ -198,17 +206,17 @@
 						size="sm"
 						onclick={toggleCommanderDamageMode}
 					>
-						{#snippet children()}{cmdMode ? '✕ Exit Cmd Dmg' : '⚔️ Commander Dmg'}{/snippet}
+						{#snippet children()}{cmdMode ? '✕ Exit Cmd' : ''}{#if !cmdMode}<Icon name="crosshair" size={14} /> Cmd Dmg{/if}{/snippet}
 					</Button>
 
 					<!-- Setup -->
 					<Button variant="ghost" size="sm" onclick={() => goto('/setup')}>
-						{#snippet children()}⚙️ Setup{/snippet}
+						{#snippet children()}<Icon name="settings" size={14} /> Setup{/snippet}
 					</Button>
 
 					<!-- Finish Game -->
 					<Button variant="ghost" size="sm" onclick={handleFinishGame}>
-						{#snippet children()}🏁 Finish Game{/snippet}
+						{#snippet children()}<Icon name="flag" size={14} /> Finish{/snippet}
 					</Button>
 				</div>
 
@@ -224,7 +232,7 @@
 			{:else}
 				<!-- Game Finished -->
 				<div class="game-finished">
-					<h2>🏆 Game Over</h2>
+					<h2><Icon name="trophy" size={28} color="var(--color-warning)" /> Game Over</h2>
 					{#if game.winnerId}
 						{@const winner = game.players.find(p => p.playerId === game.winnerId)}
 						{#if winner}
@@ -283,8 +291,8 @@
 	}
 
 	.no-game p {
-		color: var(--color-text-secondary);
-		font-size: 1rem;
+		color: var(--color-text-muted);
+		font-size: 0.9rem;
 	}
 
 	/* Tile grid layouts */
@@ -329,12 +337,15 @@
 	.big-btn {
 		padding: var(--space-md) var(--space-xl);
 		border-radius: var(--radius-xl);
-		font-size: 1.1rem;
+		font-size: 1rem;
 		font-weight: 800;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 		background: var(--color-primary);
 		color: white;
+		border: 1px solid var(--color-primary-light);
 		transition: all var(--transition-fast);
-		box-shadow: var(--shadow-glow-primary);
+		box-shadow: var(--glow-primary);
 		min-width: 140px;
 	}
 
@@ -343,24 +354,32 @@
 	}
 
 	.big-btn.running {
-		background: var(--color-warning);
-		box-shadow: 0 0 20px rgba(255, 165, 2, 0.3);
+		background: rgba(255, 171, 0, 0.2);
+		color: var(--color-warning);
+		border-color: rgba(255, 171, 0, 0.5);
+		box-shadow: 0 0 20px rgba(255, 171, 0, 0.25);
 	}
 
 	.secondary-buttons {
 		display: flex;
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
 		gap: var(--space-sm);
 		justify-content: center;
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+		padding: 2px;
+		width: 100%;
 	}
 
 	.cmd-hint {
 		text-align: center;
 		padding: var(--space-sm) var(--space-md);
-		background: rgba(255, 165, 2, 0.1);
-		border-radius: var(--radius-md);
-		font-size: 0.8rem;
+		background: rgba(255, 171, 0, 0.08);
+		border: 1px solid rgba(255, 171, 0, 0.2);
+		border-radius: var(--radius-lg);
+		font-size: 0.75rem;
 		color: var(--color-warning);
+		letter-spacing: 0.02em;
 	}
 
 	/* Game finished */
@@ -373,13 +392,17 @@
 	}
 
 	.game-finished h2 {
-		font-size: 1.5rem;
+		font-size: 1.3rem;
+		font-weight: 900;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
 	}
 
 	.winner-name {
 		font-size: 1.2rem;
-		font-weight: 700;
+		font-weight: 800;
 		color: var(--color-success);
+		text-shadow: 0 0 16px rgba(0, 230, 118, 0.4);
 	}
 
 	/* Winner modal */
@@ -395,14 +418,16 @@
 		gap: var(--space-md);
 		padding: var(--space-md);
 		background: var(--color-surface-elevated);
-		border-radius: var(--radius-md);
+		border: 1px solid var(--color-surface-hover);
+		border-radius: var(--radius-lg);
 		transition: all var(--transition-fast);
 		text-align: left;
 		width: 100%;
 	}
 
 	.winner-option:hover {
-		background: var(--color-surface-hover);
+		border-color: var(--neon-red);
+		box-shadow: var(--glow-primary);
 	}
 
 	.winner-option img {
@@ -419,12 +444,13 @@
 	}
 
 	.winner-option strong {
-		font-size: 0.9rem;
+		font-size: 0.85rem;
+		font-weight: 700;
 	}
 
 	.winner-option span {
-		font-size: 0.75rem;
-		color: var(--color-text-secondary);
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
 	}
 </style>
 

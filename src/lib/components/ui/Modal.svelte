@@ -23,12 +23,21 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if open}
-	<div class="modal-backdrop" onclick={handleBackdrop} role="presentation">
-		<div class="modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="modal-backdrop" onpointerdown={handleBackdrop}>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div
+			class="modal"
+			role="dialog"
+			aria-modal="true"
+			aria-label={title || 'Dialog'}
+			tabindex="-1"
+			onpointerdown={(e) => e.stopPropagation()}
+		>
 			{#if title}
 				<div class="modal-header">
 					<h2>{title}</h2>
-					<button class="close-btn" onclick={handleBackdrop}>✕</button>
+					<button type="button" class="close-btn" onclick={handleBackdrop}>✕</button>
 				</div>
 			{/if}
 			<div class="modal-body">
@@ -42,8 +51,8 @@
 	.modal-backdrop {
 		position: fixed;
 		inset: 0;
-		background: rgba(0, 0, 0, 0.7);
-		backdrop-filter: blur(4px);
+		background: rgba(0, 0, 0, 0.8);
+		backdrop-filter: blur(8px);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -54,13 +63,23 @@
 
 	.modal {
 		background: var(--color-surface);
-		border-radius: var(--radius-lg);
+		border: 1px solid var(--neon-red);
+		border-radius: var(--radius-xl);
 		width: 100%;
 		max-width: 480px;
 		max-height: 90vh;
 		overflow-y: auto;
-		box-shadow: var(--shadow-lg);
+		box-shadow: var(--glow-primary), var(--shadow-lg);
 		animation: scale-in 200ms ease;
+	}
+
+	@media (max-width: 480px) {
+		.modal {
+			max-width: 100%;
+			max-height: 100dvh;
+			border-radius: var(--radius-lg);
+			margin: var(--space-sm);
+		}
 	}
 
 	.modal-header {
@@ -72,30 +91,32 @@
 	}
 
 	.modal-header h2 {
-		font-size: 1.1rem;
-		font-weight: 700;
+		font-size: 0.95rem;
+		font-weight: 800;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--color-primary);
 	}
 
 	.close-btn {
-		width: 32px;
-		height: 32px;
+		width: 36px;
+		height: 36px;
 		border-radius: var(--radius-full);
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 1rem;
-		color: var(--color-text-secondary);
+		font-size: 0.9rem;
+		color: var(--color-text-muted);
 		transition: all var(--transition-fast);
+		min-height: 36px;
 	}
 
 	.close-btn:hover {
-		background: var(--color-surface-elevated);
-		color: var(--color-text);
+		background: var(--color-primary-dim);
+		color: var(--color-primary);
 	}
 
 	.modal-body {
 		padding: var(--space-lg);
 	}
 </style>
-
-

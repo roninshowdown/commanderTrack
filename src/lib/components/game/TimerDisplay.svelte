@@ -35,22 +35,25 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 2px;
-		padding: var(--space-sm);
-		border-radius: var(--radius-md);
+		padding: var(--space-sm) var(--space-md);
+		border-radius: var(--radius-lg);
 		background: var(--color-surface);
+		border: 1px solid var(--color-surface-elevated);
 		transition: all var(--transition-normal);
 	}
 
 	.timer-display.critical {
-		background: rgba(255, 71, 87, 0.15);
+		background: rgba(232, 25, 59, 0.1);
+		border-color: var(--neon-red);
+		box-shadow: var(--glow-primary);
 	}
 
 	.timer-phase {
-		font-size: 0.65rem;
-		font-weight: 600;
+		font-size: 0.6rem;
+		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--color-text-secondary);
+		letter-spacing: 0.1em;
+		color: var(--color-text-muted);
 	}
 
 	.timer-value {
@@ -67,8 +70,11 @@
 	}
 
 	.timer-meta {
-		font-size: 0.6rem;
+		font-size: 0.55rem;
+		font-weight: 600;
 		color: var(--color-text-muted);
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 	}
 </style>
 

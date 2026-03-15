@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { Player, Deck, MtgColor } from '$lib/models/types';
+	import type { Player, Deck } from '$lib/models/types';
 	import { getDataService } from '$lib/services/data-service';
 	import DeckForm from '$lib/components/admin/DeckForm.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
+	import ColorPip from '$lib/components/ui/ColorPip.svelte';
 
 	let players = $state<Player[]>([]);
 	let decks = $state<Deck[]>([]);
@@ -14,13 +16,6 @@
 	let editingDeck = $state<Deck | null>(null);
 	let toast = $state<{ message: string; type: 'success' | 'error' } | null>(null);
 
-	const colorEmoji: Record<MtgColor, string> = {
-		white: '⚪',
-		blue: '🔵',
-		black: '⚫',
-		red: '🔴',
-		green: '🟢'
-	};
 
 	onMount(loadData);
 
@@ -112,23 +107,23 @@
 					{#if deck.commanderImageUrl}
 						<img src={deck.commanderImageUrl} alt={deck.commanderName} class="deck-img" />
 					{:else}
-						<div class="deck-img placeholder">🃏</div>
+						<div class="deck-img placeholder"><Icon name="deck" size={24} color="var(--color-text-muted)" /></div>
 					{/if}
 					<div class="deck-info">
 						<span class="deck-commander">{deck.commanderName}</span>
 						<span class="deck-player">{getPlayerName(deck.playerId)}</span>
 						<div class="deck-colors">
 							{#each deck.colors as color}
-								<span title={color}>{colorEmoji[color]}</span>
+								<ColorPip {color} size={18} />
 							{/each}
 						</div>
 					</div>
 					<div class="deck-actions">
 						<Button variant="ghost" size="sm" onclick={() => openEdit(deck)}>
-							{#snippet children()}✏️{/snippet}
+							{#snippet children()}<Icon name="edit" size={16} />{/snippet}
 						</Button>
 						<Button variant="ghost" size="sm" onclick={() => handleDelete(deck)}>
-							{#snippet children()}🗑️{/snippet}
+							{#snippet children()}<Icon name="trash" size={16} />{/snippet}
 						</Button>
 					</div>
 				</div>
@@ -165,23 +160,28 @@
 	}
 
 	h1 {
-		font-size: 1.8rem;
-		font-weight: 800;
+		font-size: 1.4rem;
+		font-weight: 900;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--color-primary);
 	}
 
 	.back-link {
-		font-size: 0.8rem;
-		color: var(--color-text-secondary);
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		letter-spacing: 0.04em;
 	}
 
 	.loading, .empty {
 		text-align: center;
 		padding: var(--space-2xl);
-		color: var(--color-text-secondary);
+		color: var(--color-text-muted);
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: var(--space-md);
+		font-size: 0.85rem;
 	}
 
 	.deck-list {
@@ -196,12 +196,13 @@
 		gap: var(--space-md);
 		padding: var(--space-md);
 		background: var(--color-surface);
-		border-radius: var(--radius-md);
-		transition: background var(--transition-fast);
+		border: 1px solid var(--color-surface-elevated);
+		border-radius: var(--radius-lg);
+		transition: all var(--transition-fast);
 	}
 
 	.deck-card:hover {
-		background: var(--color-surface-elevated);
+		border-color: var(--neon-cyan);
 	}
 
 	.deck-img {
@@ -209,6 +210,7 @@
 		height: 48px;
 		border-radius: var(--radius-sm);
 		object-fit: cover;
+		border: 1px solid var(--color-surface-elevated);
 	}
 
 	.deck-img.placeholder {
@@ -227,13 +229,14 @@
 	}
 
 	.deck-commander {
-		font-weight: 600;
-		font-size: 0.9rem;
+		font-weight: 700;
+		font-size: 0.85rem;
+		letter-spacing: 0.03em;
 	}
 
 	.deck-player {
-		font-size: 0.75rem;
-		color: var(--color-text-secondary);
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
 	}
 
 	.deck-colors {

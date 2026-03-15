@@ -3,6 +3,7 @@
 	import type { GameRecord, Player, Deck } from '$lib/models/types';
 	import { getDataService, isFirebaseConfigured } from '$lib/services/data-service';
 	import { authUser } from '$lib/firebase/auth';
+	import Icon from '$lib/components/ui/Icon.svelte';
 
 	interface PlayerRank {
 		name: string;
@@ -29,28 +30,42 @@
 
 	const localMode = !isFirebaseConfigured();
 	let user = $derived($authUser);
+	let hasLoaded = $state(false);
 
-	onMount(async () => {
+	onMount(() => {
+		loadData();
+	});
+
+	// Reactively load when user auth state changes (Firebase mode)
+	$effect(() => {
+		const _user = user;
+		if (!localMode && _user && !hasLoaded) {
+			loadData();
+		}
+	});
+
+	async function loadData() {
 		if (!localMode && !user) {
 			loading = false;
 			return;
 		}
-
+		loading = true;
 		try {
 			const ds = await getDataService();
-			const [games, players, decks] = await Promise.all([
+			const [games, allPlayers, allDecks] = await Promise.all([
 				ds.getGameRecords(),
 				ds.getPlayers(),
 				ds.getDecks()
 			]);
 
-			playerRanks = computePlayerRanks(games, players);
-			deckRanks = computeDeckRanks(games, players, decks);
+			playerRanks = computePlayerRanks(games, allPlayers);
+			deckRanks = computeDeckRanks(games, allPlayers, allDecks);
+			hasLoaded = true;
 		} catch (e) {
 			console.error('Failed to load ranks', e);
 		}
 		loading = false;
-	});
+	}
 
 	function computePlayerRanks(games: GameRecord[], players: Player[]): PlayerRank[] {
 		const map = new Map<string, { played: number; won: number; lost: number }>();
@@ -168,66 +183,57 @@
 
 		{#if activeTab === 'players'}
 			{#if playerRanks.length === 0}
-				<div class="empty"><p>No game data yet.</p></div>
+				<div class="empty"><p>No game data yet. Finish a game first!</p></div>
 			{:else}
-				<div class="rank-table-wrapper">
-					<table class="rank-table">
-						<thead>
-							<tr>
-								<th>#</th>
-								<th>Player</th>
-								<th>Played</th>
-								<th>Won</th>
-								<th>Lost</th>
-								<th>Win %</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each sortedPlayerRanks() as rank, i}
-								<tr>
-									<td class="rank-num">{i + 1}</td>
-									<td class="rank-name">{rank.name}</td>
-									<td>{rank.gamesPlayed}</td>
-									<td class="won">{rank.gamesWon}</td>
-									<td class="lost">{rank.gamesLost}</td>
-									<td class="rate">{rank.winRate}%</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
+				<div class="rank-list">
+					{#each sortedPlayerRanks() as rank, i}
+						<div class="rank-card">
+							<div class="rank-position">
+								{#if i === 0}
+									<Icon name="crown" size={20} color="var(--color-warning)" />
+								{:else}
+									<span class="rank-num">#{i + 1}</span>
+								{/if}
+							</div>
+							<div class="rank-info">
+								<span class="rank-name">{rank.name}</span>
+								<div class="rank-stats-row">
+									<span class="rank-stat">{rank.gamesPlayed} played</span>
+									<span class="rank-stat won">{rank.gamesWon}W</span>
+									<span class="rank-stat lost">{rank.gamesLost}L</span>
+								</div>
+							</div>
+							<div class="rank-rate">{rank.winRate}%</div>
+						</div>
+					{/each}
 				</div>
 			{/if}
 		{:else}
 			{#if deckRanks.length === 0}
-				<div class="empty"><p>No game data yet.</p></div>
+				<div class="empty"><p>No game data yet. Finish a game first!</p></div>
 			{:else}
-				<div class="rank-table-wrapper">
-					<table class="rank-table">
-						<thead>
-							<tr>
-								<th>#</th>
-								<th>Commander</th>
-								<th>Player</th>
-								<th>Played</th>
-								<th>Won</th>
-								<th>Lost</th>
-								<th>Win %</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each sortedDeckRanks() as rank, i}
-								<tr>
-									<td class="rank-num">{i + 1}</td>
-									<td class="rank-name">{rank.commanderName}</td>
-									<td class="rank-player">{rank.playerName}</td>
-									<td>{rank.gamesPlayed}</td>
-									<td class="won">{rank.gamesWon}</td>
-									<td class="lost">{rank.gamesLost}</td>
-									<td class="rate">{rank.winRate}%</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
+				<div class="rank-list">
+					{#each sortedDeckRanks() as rank, i}
+						<div class="rank-card">
+							<div class="rank-position">
+								{#if i === 0}
+									<Icon name="crown" size={20} color="var(--color-warning)" />
+								{:else}
+									<span class="rank-num">#{i + 1}</span>
+								{/if}
+							</div>
+							<div class="rank-info">
+								<span class="rank-name">{rank.commanderName}</span>
+								<span class="rank-sub">{rank.playerName}</span>
+								<div class="rank-stats-row">
+									<span class="rank-stat">{rank.gamesPlayed} played</span>
+									<span class="rank-stat won">{rank.gamesWon}W</span>
+									<span class="rank-stat lost">{rank.gamesLost}L</span>
+								</div>
+							</div>
+							<div class="rank-rate">{rank.winRate}%</div>
+						</div>
+					{/each}
 				</div>
 			{/if}
 		{/if}
@@ -236,32 +242,38 @@
 
 <style>
 	.rank-page {
-		padding-top: var(--space-lg);
+		padding-top: var(--space-md);
 	}
 
 	h1 {
-		font-size: 1.8rem;
-		font-weight: 800;
+		font-size: 1.4rem;
+		font-weight: 900;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--color-primary);
 	}
 
 	.subtitle {
-		color: var(--color-text-secondary);
+		color: var(--color-text-muted);
 		margin-top: var(--space-xs);
-		margin-bottom: var(--space-xl);
-		font-size: 0.9rem;
+		margin-bottom: var(--space-md);
+		font-size: 0.75rem;
+		letter-spacing: 0.04em;
 	}
 
 	.loading, .empty {
 		text-align: center;
 		padding: var(--space-2xl);
-		color: var(--color-text-secondary);
+		color: var(--color-text-muted);
+		font-size: 0.85rem;
 	}
 
 	.tabs {
 		display: flex;
 		gap: 2px;
 		background: var(--color-surface);
-		border-radius: var(--radius-md);
+		border: 1px solid var(--color-surface-elevated);
+		border-radius: var(--radius-lg);
 		padding: 3px;
 		margin-bottom: var(--space-md);
 	}
@@ -269,16 +281,23 @@
 	.tab {
 		flex: 1;
 		padding: var(--space-sm);
-		border-radius: var(--radius-sm);
-		font-weight: 600;
-		font-size: 0.85rem;
+		border-radius: var(--radius-md);
+		font-weight: 700;
+		font-size: 0.75rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 		transition: all var(--transition-fast);
-		color: var(--color-text-secondary);
+		color: var(--color-text-muted);
+		min-height: 44px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.tab.active {
 		background: var(--color-primary);
 		color: white;
+		box-shadow: var(--glow-primary);
 	}
 
 	.sort-bar {
@@ -289,80 +308,119 @@
 	}
 
 	.sort-label {
-		font-size: 0.8rem;
+		font-size: 0.65rem;
 		color: var(--color-text-muted);
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 	}
 
 	.sort-btn {
-		padding: 4px 10px;
+		padding: 6px 12px;
 		border-radius: var(--radius-sm);
-		font-size: 0.75rem;
-		font-weight: 600;
+		font-size: 0.65rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
 		background: var(--color-surface);
-		color: var(--color-text-secondary);
+		color: var(--color-text-muted);
+		border: 1px solid var(--color-surface-elevated);
 		transition: all var(--transition-fast);
+		min-height: 36px;
 	}
 
 	.sort-btn.active {
 		background: var(--color-surface-elevated);
-		color: var(--color-text);
+		color: var(--color-secondary);
+		border-color: var(--neon-cyan);
 	}
 
-	.rank-table-wrapper {
-		overflow-x: auto;
-		border-radius: var(--radius-md);
+	/* Card-based rank list */
+	.rank-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
 	}
 
-	.rank-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.85rem;
-	}
-
-	.rank-table th {
-		text-align: left;
-		padding: var(--space-sm) var(--space-md);
+	.rank-card {
+		display: flex;
+		align-items: center;
+		gap: var(--space-md);
+		padding: var(--space-md);
 		background: var(--color-surface);
-		color: var(--color-text-secondary);
-		font-size: 0.75rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
+		border: 1px solid var(--color-surface-elevated);
+		border-radius: var(--radius-lg);
+		transition: all var(--transition-fast);
 	}
 
-	.rank-table td {
-		padding: var(--space-sm) var(--space-md);
-		border-bottom: 1px solid var(--color-surface-elevated);
+	.rank-card:first-child {
+		border-color: var(--neon-red);
+		box-shadow: var(--glow-primary);
+	}
+
+	.rank-position {
+		width: 36px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
 	}
 
 	.rank-num {
 		font-weight: 800;
+		font-size: 0.9rem;
 		color: var(--color-text-muted);
-		width: 32px;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.rank-info {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
 	}
 
 	.rank-name {
-		font-weight: 600;
-	}
-
-	.rank-player {
-		font-size: 0.8rem;
-		color: var(--color-text-secondary);
-	}
-
-	.won {
-		color: var(--color-success);
-		font-weight: 600;
-	}
-
-	.lost {
-		color: var(--color-danger);
-		font-weight: 600;
-	}
-
-	.rate {
 		font-weight: 700;
+		font-size: 0.85rem;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.rank-sub {
+		font-size: 0.65rem;
+		color: var(--color-text-muted);
+	}
+
+	.rank-stats-row {
+		display: flex;
+		gap: var(--space-sm);
+		margin-top: 2px;
+	}
+
+	.rank-stat {
+		font-size: 0.65rem;
+		color: var(--color-text-muted);
 		font-variant-numeric: tabular-nums;
+	}
+
+	.rank-stat.won {
+		color: var(--color-success);
+		font-weight: 700;
+	}
+
+	.rank-stat.lost {
+		color: var(--color-danger);
+		font-weight: 700;
+	}
+
+	.rank-rate {
+		font-size: 1.1rem;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		color: var(--color-secondary);
+		flex-shrink: 0;
 	}
 </style>
 

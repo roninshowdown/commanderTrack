@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { Deck, Player, MtgColor } from '$lib/models/types';
 	import Button from '$lib/components/ui/Button.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
+	import ColorPip from '$lib/components/ui/ColorPip.svelte';
 	import { searchCommander, autocompleteCardName } from '$lib/services/scryfall';
 
 	interface Props {
@@ -21,13 +23,6 @@
 	let showSuggestions = $state(false);
 
 	const allColors: MtgColor[] = ['white', 'blue', 'black', 'red', 'green'];
-	const colorSymbols: Record<MtgColor, string> = {
-		white: '☀️',
-		blue: '💧',
-		black: '💀',
-		red: '🔥',
-		green: '🌿'
-	};
 
 	async function searchCard() {
 		if (!commanderName.trim()) return;
@@ -110,13 +105,13 @@
 				{/if}
 			</div>
 			<Button variant="ghost" size="sm" onclick={searchCard} disabled={searching}>
-				{#snippet children()}{searching ? '...' : '🔍'}{/snippet}
+				{#snippet children()}{#if searching}...{:else}<Icon name="search" size={16} />{/if}{/snippet}
 			</Button>
 		</div>
 	</div>
 
 	<div class="field">
-		<label>Colors</label>
+		<span class="field-label">Colors</span>
 		<div class="color-pills">
 			{#each allColors as color}
 				<button
@@ -125,7 +120,7 @@
 					class:active={colors.includes(color)}
 					onclick={() => toggleColor(color)}
 				>
-					{colorSymbols[color]}
+					<ColorPip {color} size={28} active={colors.includes(color)} />
 				</button>
 			{/each}
 		</div>
@@ -158,7 +153,7 @@
 		gap: var(--space-xs);
 	}
 
-	label {
+	label, .field-label {
 		font-size: 0.85rem;
 		font-weight: 600;
 		color: var(--color-text-secondary);

@@ -6,6 +6,7 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
+	import Icon from '$lib/components/ui/Icon.svelte';
 
 	let players = $state<Player[]>([]);
 	let loading = $state(true);
@@ -90,17 +91,17 @@
 					{#if player.imageUrl}
 						<img src={player.imageUrl} alt={player.name} class="player-img" />
 					{:else}
-						<div class="player-img placeholder">👤</div>
+						<div class="player-img placeholder"><Icon name="user" size={24} color="var(--color-text-muted)" /></div>
 					{/if}
 					<div class="player-info">
 						<span class="player-name">{player.name}</span>
 					</div>
 					<div class="player-actions">
 						<Button variant="ghost" size="sm" onclick={() => openEdit(player)}>
-							{#snippet children()}✏️{/snippet}
+							{#snippet children()}<Icon name="edit" size={16} />{/snippet}
 						</Button>
 						<Button variant="ghost" size="sm" onclick={() => handleDelete(player)}>
-							{#snippet children()}🗑️{/snippet}
+							{#snippet children()}<Icon name="trash" size={16} />{/snippet}
 						</Button>
 					</div>
 				</div>
@@ -125,7 +126,7 @@
 
 <style>
 	.page {
-		padding-top: var(--space-lg);
+		padding-top: var(--space-md);
 	}
 
 	.page-header {
@@ -136,19 +137,24 @@
 	}
 
 	h1 {
-		font-size: 1.8rem;
-		font-weight: 800;
+		font-size: 1.4rem;
+		font-weight: 900;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--color-primary);
 	}
 
 	.back-link {
-		font-size: 0.8rem;
-		color: var(--color-text-secondary);
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		letter-spacing: 0.04em;
 	}
 
 	.loading, .empty {
 		text-align: center;
 		padding: var(--space-2xl);
-		color: var(--color-text-secondary);
+		color: var(--color-text-muted);
+		font-size: 0.85rem;
 	}
 
 	.player-list {
@@ -163,12 +169,13 @@
 		gap: var(--space-md);
 		padding: var(--space-md);
 		background: var(--color-surface);
-		border-radius: var(--radius-md);
-		transition: background var(--transition-fast);
+		border: 1px solid var(--color-surface-elevated);
+		border-radius: var(--radius-lg);
+		transition: all var(--transition-fast);
 	}
 
 	.player-card:hover {
-		background: var(--color-surface-elevated);
+		border-color: var(--neon-cyan);
 	}
 
 	.player-img {
@@ -176,6 +183,7 @@
 		height: 48px;
 		border-radius: var(--radius-full);
 		object-fit: cover;
+		border: 1px solid var(--color-surface-elevated);
 	}
 
 	.player-img.placeholder {
@@ -191,7 +199,9 @@
 	}
 
 	.player-name {
-		font-weight: 600;
+		font-weight: 700;
+		font-size: 0.9rem;
+		letter-spacing: 0.03em;
 	}
 
 	.player-actions {
