@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import {
 		gameState, logEntries, commanderDamageMode, commanderDamageSource,
@@ -6,15 +7,26 @@
 		toggleStartStop, advanceNextTurn, changeLife, applyCommanderDamage,
 		toggleCommanderDamageMode, setCommanderDamageSourcePlayer, clearCommanderDamageMode,
 		setReactivePlayer, returnPriorityToActive, pickRandomOpponent,
-		finishGame, resetGame
+		finishGame, resetGame, abandonGame, restoreActiveGame
 	} from '$lib/stores/gameStore';
+	import { authUser } from '$lib/firebase/auth';
 	import PlayerTile from '$lib/components/game/PlayerTile.svelte';
 	import TimerDisplay from '$lib/components/game/TimerDisplay.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 
+	let user = $derived($authUser);
 	let showWinnerModal: boolean = $state(false);
+	let restoring: boolean = $state(false);
+
+	onMount(async () => {
+		if (!$gameState && user?.uid) {
+			restoring = true;
+			await restoreActiveGame(user.uid);
+			restoring = false;
+		}
+	});
 
 	function handleTileClick(idx: number) {
 		if (!$gameState) return;
@@ -38,10 +50,17 @@
 
 	function selectWinner(id: string) { showWinnerModal = false; finishGame(id); }
 	function newGame() { resetGame(); goto('/setup'); }
+	function handleAbandon() {
+		if (!confirm('Abandon this game? It will not be recorded.')) return;
+		abandonGame();
+		goto('/setup');
+	}
 </script>
 
 <div class="game-page">
-	{#if !$gameState}
+	{#if restoring}
+		<div class="no-game"><p>Restoring game…</p></div>
+	{:else if !$gameState}
 		<div class="no-game"><p>No active game.</p><Button variant="primary" onclick={() => goto('/setup')}>{#snippet children()}<Icon name="play" size={16}/> Setup a Game{/snippet}</Button></div>
 	{:else if $gameState.isFinished}
 		<div class="finished animate-fade-in">
@@ -73,9 +92,12 @@
 			<Button variant="danger" size="sm" onclick={()=>showWinnerModal=true}>
 				{#snippet children()}<Icon name="flag" size={14}/> Finish{/snippet}
 			</Button>
+			<Button variant="ghost" size="sm" onclick={handleAbandon}>
+				{#snippet children()}<Icon name="trash" size={14}/> Abandon{/snippet}
+			</Button>
 		</div>
 
-		<div class="tile-grid" class:grid-2={($gameState.players.length ?? 0) <= 4} class:grid-3={($gameState.players.length ?? 0) > 4}>
+		<div class="tile-grid">
 			{#each $gameState.players as p, i}
 				<PlayerTile player={p} playerIndex={i}
 					isActive={i===$gameState.activePlayerIndex}
@@ -106,15 +128,14 @@
 </div>
 
 <style>
-	.game-page{padding-top:var(--space-sm);display:flex;flex-direction:column;gap:var(--space-md)}
+	.game-page{padding-top:var(--space-sm);display:flex;flex-direction:column;gap:var(--space-md);max-width:100%}
 	.no-game,.finished{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-lg);padding:var(--space-2xl);text-align:center;min-height:60dvh}
 	.finished h1{font-size:1.6rem;font-weight:900;color:var(--color-primary);letter-spacing:.1em;text-transform:uppercase}
 	.winner{font-size:1.1rem;font-weight:700;color:var(--color-warning)}
 	.controls{display:flex;gap:var(--space-xs);flex-wrap:wrap;justify-content:center}
-	.tile-grid{display:grid;gap:var(--space-sm)}
-	.grid-2{grid-template-columns:1fr 1fr}
-	.grid-3{grid-template-columns:1fr 1fr 1fr}
-	@media(max-width:480px){.grid-3{grid-template-columns:1fr 1fr}}
+	.tile-grid{display:flex;gap:var(--space-sm);overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;padding-bottom:var(--space-sm)}
+	.tile-grid :global(.tile){flex:0 0 min(200px,45vw);scroll-snap-align:start}
+	@media(min-width:768px){.tile-grid{flex-wrap:wrap;overflow-x:visible;scroll-snap-type:none}.tile-grid :global(.tile){flex:0 0 calc(50% - var(--space-sm))}}
 	.winner-list{display:flex;flex-direction:column;gap:var(--space-sm)}
 	.winner-opt{display:flex;align-items:center;gap:var(--space-md);padding:var(--space-md);border-radius:var(--radius-lg);background:var(--color-surface);border:1px solid var(--color-surface-elevated);transition:all var(--transition-fast);text-align:left;cursor:pointer}
 	.winner-opt:hover{border-color:var(--neon-cyan);box-shadow:var(--glow-cyan)}

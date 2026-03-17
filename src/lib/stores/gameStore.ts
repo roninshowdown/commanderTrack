@@ -3,7 +3,7 @@
    ============================================ */
 
 import { writable, derived, get } from 'svelte/store';
-import type { GameState, GameConfig, GamePlayerState, LogEntry, TimerConfigA, TimerConfigB } from '$lib/models/types';
+import type { GameState, GameConfig, GamePlayerState, LogEntry, TimerConfigA, TimerConfigB, ActiveGameData } from '$lib/models/types';
 import {
 	tick, startGame, togglePause, passToReactivePlayer, returnToActivePlayer,
 	nextTurn as engineNextTurn, isCritical, getCurrentTickingTime, getScaledPlayerTime, getScaledReactionTime
@@ -17,7 +17,12 @@ const _gameState = writable<GameState | null>(null);
 const _logEntries = writable<LogEntry[]>([]);
 const _commanderDamageMode = writable(false);
 const _commanderDamageSource = writable<number | null>(null);
+const _activeZoneId = writable<string | null>(null);
 let timerInterval: ReturnType<typeof setInterval> | null = null;
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let _currentUid: string | null = null;
+
+const ACTIVE_GAME_LS_KEY = 'ct_activeGameState';
 
 /* ── Public derived stores ── */
 export const gameState = derived(_gameState, ($s) => $s);
@@ -28,6 +33,8 @@ export const isGameActive = derived(_gameState, ($s) => $s !== null && !$s.isFin
 export const isGameRunning = derived(_gameState, ($s) => $s?.isRunning ?? false);
 export const currentTickingTime = derived(_gameState, ($s) => ($s ? getCurrentTickingTime($s) : 0));
 export const isTimerCritical = derived(currentTickingTime, ($t) => isCritical($t));
+export const activeZoneId = derived(_activeZoneId, ($z) => $z);
+export const hasActiveGame = derived(_gameState, ($s) => $s !== null && !$s.isFinished);
 
 /* ── Setup player shape ── */
 interface SetupPlayer {
@@ -40,10 +47,12 @@ interface SetupPlayer {
 
 /* ── Actions ── */
 
-export function initGame(setupPlayers: SetupPlayer[], config: GameConfig): void {
+export function initGame(setupPlayers: SetupPlayer[], config: GameConfig, zoneId: string, userUid: string): void {
 	stopTimer();
 	_logEntries.set([]);
 	clearCommanderDamageMode();
+	_activeZoneId.set(zoneId);
+	_currentUid = userUid;
 	if (!setupPlayers?.length) return;
 
 	const tc = config.timerConfig;
@@ -76,6 +85,7 @@ export function initGame(setupPlayers: SetupPlayer[], config: GameConfig): void 
 		timerInfo: { phase: 'IDLE', targetPlayerIndex: 0 },
 		sharedStartTimeRemaining: tc.variant === 'A' ? (tc as TimerConfigA).sharedStartTimeSeconds : 0
 	});
+	schedulePersist();
 }
 
 export function toggleStartStop(): void {
@@ -87,6 +97,8 @@ export function toggleStartStop(): void {
 	} else if (state.isRunning) {
 		_gameState.set(togglePause(state));
 		stopTimer();
+		persistToLocalStorage();
+		syncActiveGameToFirestore();
 	} else {
 		_gameState.set(togglePause(state));
 		startTimer();
@@ -182,6 +194,8 @@ export function clearCommanderDamageMode(): void {
 
 export function finishGame(winnerId: string): void {
 	stopTimer();
+	cancelPersist();
+	const zoneId = get(_activeZoneId) ?? '';
 	_gameState.update((state) => {
 		if (!state) return state;
 		try {
@@ -192,18 +206,64 @@ export function finishGame(winnerId: string): void {
 				timerVariant: state.config.timerConfig.variant,
 				winnerId,
 				createdAt: state.config.createdAt,
-				finishedAt: Date.now()
+				finishedAt: Date.now(),
+				zoneId
 			});
 		} catch (e) { console.warn('Failed to persist game record:', e); }
 		return { ...state, isFinished: true, isRunning: false, winnerId };
 	});
+	deletePersistedGame();
+}
+
+export function abandonGame(): void {
+	stopTimer();
+	cancelPersist();
+	_gameState.set(null);
+	_logEntries.set([]);
+	_activeZoneId.set(null);
+	clearCommanderDamageMode();
+	deletePersistedGame();
 }
 
 export function resetGame(): void {
 	stopTimer();
+	cancelPersist();
 	_gameState.set(null);
 	_logEntries.set([]);
+	_activeZoneId.set(null);
 	clearCommanderDamageMode();
+	deletePersistedGame();
+}
+
+/** Restore active game from localStorage or Firestore. Resumes in PAUSED state. */
+export async function restoreActiveGame(userUid: string): Promise<boolean> {
+	// Try localStorage first
+	try {
+		const raw = localStorage.getItem(ACTIVE_GAME_LS_KEY);
+		if (raw) {
+			const data: ActiveGameData = JSON.parse(raw);
+			_gameState.set({ ...data.gameState, isRunning: false });
+			_logEntries.set(data.logEntries);
+			_activeZoneId.set(data.zoneId);
+			_currentUid = userUid;
+			return true;
+		}
+	} catch { /* ignore parse errors */ }
+	// Try Firestore
+	try {
+		const { getDataService } = await import('$lib/services/data-service');
+		const ds = await getDataService();
+		const data = await ds.getActiveGame(userUid);
+		if (data) {
+			_gameState.set({ ...data.gameState, isRunning: false });
+			_logEntries.set(data.logEntries);
+			_activeZoneId.set(data.zoneId);
+			_currentUid = userUid;
+			persistToLocalStorage(); // cache locally
+			return true;
+		}
+	} catch (e) { console.warn('Failed to restore from Firestore:', e); }
+	return false;
 }
 
 /* ── Internal helpers ── */
@@ -229,12 +289,64 @@ function addLog(
 	gameId: string, playerId: string, playerName: string,
 	value: number, type: 'life' | 'commander_damage', sourcePlayerId?: string
 ): void {
-	const entry: LogEntry = { id: uid(), gameId, playerId, playerName, value, type, sourcePlayerId, timestamp: Date.now() };
+	const zoneId = get(_activeZoneId) ?? undefined;
+	const entry: LogEntry = { id: uid(), gameId, playerId, playerName, value, type, sourcePlayerId, timestamp: Date.now(), zoneId };
 	_logEntries.update((e) => [entry, ...e]);
 	try {
 		getDataServiceSync().addLogEntry({
-			gameId, playerId, playerName, value, type, sourcePlayerId, timestamp: entry.timestamp
+			gameId, playerId, playerName, value, type, sourcePlayerId, timestamp: entry.timestamp, zoneId
 		});
 	} catch (e) { console.warn('Failed to persist log entry:', e); }
+	schedulePersist();
+}
+
+/* ── Persistence helpers ── */
+
+function schedulePersist(): void {
+	if (persistTimer) return;
+	persistTimer = setTimeout(() => {
+		persistTimer = null;
+		persistToLocalStorage();
+	}, 2000);
+}
+
+function cancelPersist(): void {
+	if (persistTimer) { clearTimeout(persistTimer); persistTimer = null; }
+}
+
+function persistToLocalStorage(): void {
+	const state = get(_gameState);
+	const logs = get(_logEntries);
+	const zoneId = get(_activeZoneId) ?? '';
+	if (!state || state.isFinished) {
+		localStorage.removeItem(ACTIVE_GAME_LS_KEY);
+		return;
+	}
+	const data: ActiveGameData = { gameState: state, logEntries: logs, zoneId, updatedAt: Date.now() };
+	try {
+		localStorage.setItem(ACTIVE_GAME_LS_KEY, JSON.stringify(data));
+	} catch (e) { console.warn('Failed to persist game to localStorage:', e); }
+}
+
+function deletePersistedGame(): void {
+	localStorage.removeItem(ACTIVE_GAME_LS_KEY);
+	if (_currentUid) {
+		try {
+			getDataServiceSync().deleteActiveGame(_currentUid);
+		} catch { /* fire-and-forget */ }
+	}
+	_currentUid = null;
+}
+
+/** Sync to Firestore (called on pause and debounced) */
+export function syncActiveGameToFirestore(): void {
+	const state = get(_gameState);
+	const logs = get(_logEntries);
+	const zoneId = get(_activeZoneId) ?? '';
+	if (!state || state.isFinished || !_currentUid) return;
+	const data: ActiveGameData = { gameState: state, logEntries: logs, zoneId, updatedAt: Date.now() };
+	try {
+		getDataServiceSync().saveActiveGame(_currentUid, data);
+	} catch (e) { console.warn('Failed to sync to Firestore:', e); }
 }
 

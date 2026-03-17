@@ -2,7 +2,42 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
+    // Account profiles — users can only write their own
+    match /profiles/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Commander Zones — any authenticated user can read/create; write restricted
+    match /zones/{zoneId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null;
+    }
+
+    // Active game state — users can only access their own
+    match /activeGames/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Legacy players collection (kept for migration)
+    match /players/{playerId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Decks — any authenticated user can read; write allowed
+    match /decks/{deckId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+
+    // Game records — scoped by zone, any authenticated user
+    match /games/{gameId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Game logs
+    match /gameLogs/{logId} {
       allow read, write: if request.auth != null;
     }
   }

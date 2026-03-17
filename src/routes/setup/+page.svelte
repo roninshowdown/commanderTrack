@@ -2,12 +2,18 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { Player, Deck, GameConfig, TimerConfigA, TimerConfigB, TimerVariant } from '$lib/models/types';
-	import { getDataService } from '$lib/services/data-service';
-	import { initGame } from '$lib/stores/gameStore';
+	import { initGame, hasActiveGame, abandonGame } from '$lib/stores/gameStore';
+	import { currentZone } from '$lib/stores/zoneStore';
+	import { getPlayersInZone, getDecksInZone } from '$lib/stores/zoneStore';
+	import { authUser } from '$lib/firebase/auth';
 	import { uid } from '$lib/utils/format';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
+
+	let user = $derived($authUser);
+	let zone = $derived($currentZone);
+	let gameActive = $derived($hasActiveGame);
 
 	let players: Player[] = $state([]);
 	let decks: Deck[] = $state([]);
@@ -33,9 +39,12 @@
 	let toast: { message: string; type: 'success' | 'error' } | null = $state(null);
 
 	onMount(async () => {
+		if (!zone) { loading = false; return; }
 		try {
-			const ds = await getDataService();
-			[players, decks] = await Promise.all([ds.getPlayers(), ds.getDecks()]);
+			[players, decks] = await Promise.all([
+				getPlayersInZone(zone.id),
+				getDecksInZone(zone.id)
+			]);
 		} catch (e: any) { toast = { message: `Load failed: ${e?.message ?? e}`, type: 'error' }; }
 		loading = false;
 	});
@@ -55,7 +64,21 @@
 		return pid ? decks.filter((d) => d.playerId === pid) : [];
 	}
 
+	function handleAbandon() {
+		if (!confirm('Abandon your active game? It will not be recorded.')) return;
+		abandonGame();
+		toast = { message: 'Game abandoned', type: 'success' };
+	}
+
 	function startGame_() {
+		if (gameActive) {
+			toast = { message: 'You already have an active game. Finish or abandon it first.', type: 'error' };
+			return;
+		}
+		if (!zone) {
+			toast = { message: 'No active Commander Zone selected.', type: 'error' };
+			return;
+		}
 		const setupPlayers = [];
 		for (let i = 0; i < playerCount; i++) {
 			const pid = selectedPlayers[i];
@@ -70,14 +93,25 @@
 			: { variant: 'B' as const, poolTimeSeconds: poolTimeMinB * 60, playerTimeSeconds: playerTimeMin * 60, reactionTimeSeconds: reactionTimeMin * 60, scaleFactorPlayerTimeSeconds: scalePlayer, scaleFactorReactionTimeSeconds: scaleReaction } satisfies TimerConfigB;
 
 		const config: GameConfig = { id: uid(), maxLife, timerConfig, createdAt: Date.now() };
-		initGame(setupPlayers, config);
+		initGame(setupPlayers, config, zone.id, user?.uid ?? '');
 		goto('/game');
 	}
 </script>
 
 <div class="setup">
 	<h1>Game Setup</h1>
-	{#if loading}<div class="loading">Loading…</div>
+	{#if !zone}
+		<div class="loading">No Commander Zone selected. <a href="/zones">Join or create one →</a></div>
+	{:else if gameActive}
+		<div class="active-game-warning">
+			<Icon name="swords" size={24} color="var(--color-warning)" />
+			<p>You have an active game. Finish or abandon it before starting a new one.</p>
+			<div class="warning-actions">
+				<Button variant="primary" onclick={() => goto('/game')}>{#snippet children()}Resume Game{/snippet}</Button>
+				<Button variant="danger" size="sm" onclick={handleAbandon}>{#snippet children()}Abandon Game{/snippet}</Button>
+			</div>
+		</div>
+	{:else if loading}<div class="loading">Loading…</div>
 	{:else}
 		<section class="sec"><h2>Players</h2>
 			<div class="count-row">{#each [2,3,4,5,6] as n}<button class="cnt" class:active={playerCount===n} onclick={()=>playerCount=n}>{n}</button>{/each}</div>
@@ -146,6 +180,9 @@
 	.field label{font-size:.7rem;font-weight:700;color:var(--color-text-muted);letter-spacing:.04em;text-transform:uppercase}
 	.start{margin-top:var(--space-2xl)}
 	.loading{text-align:center;padding:var(--space-2xl);color:var(--color-text-muted)}
+	.active-game-warning{display:flex;flex-direction:column;align-items:center;gap:var(--space-md);padding:var(--space-xl);text-align:center;background:rgba(255,171,0,.08);border:1px solid rgba(255,171,0,.3);border-radius:var(--radius-lg)}
+	.active-game-warning p{color:var(--color-text-muted);font-size:.85rem}
+	.warning-actions{display:flex;gap:var(--space-sm)}
 </style>
 
 

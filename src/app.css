@@ -158,6 +158,16 @@ textarea:focus {
 	border-radius: 2px;
 }
 
+/* Hide scrollbar on mobile */
+@media (max-width: 768px) {
+	::-webkit-scrollbar {
+		display: none;
+	}
+	* {
+		scrollbar-width: none;
+	}
+}
+
 /* ── Animations ── */
 
 @keyframes pulse {

@@ -54,7 +54,7 @@ export function generateFullMockDataSet() {
 		const createdAt = now - Math.floor(Math.random() * 30 * 86400000);
 		const winnerId = Math.random() > 0.15 ? pIds[Math.floor(Math.random() * pIds.length)] : null;
 		const gid = uid();
-		gameRecords.push({ id: gid, playerIds: pIds, deckIds: dIds, maxLife: 40, timerVariant: 'B', winnerId, createdAt, finishedAt: createdAt + 3600000 });
+		gameRecords.push({ id: gid, playerIds: pIds, deckIds: dIds, maxLife: 40, timerVariant: 'B', winnerId, createdAt, finishedAt: createdAt + 3600000, zoneId: 'mock-zone' });
 
 		for (let l = 0; l < 20 + Math.floor(Math.random() * 30); l++) {
 			const pid = pIds[Math.floor(Math.random() * pIds.length)];

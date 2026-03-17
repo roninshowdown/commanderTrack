@@ -3,10 +3,13 @@
 	import type { Player, Deck, GameRecord, LogEntry } from '$lib/models/types';
 	import { getDataService } from '$lib/services/data-service';
 	import { gameState, logEntries as currentLogs } from '$lib/stores/gameStore';
+	import { currentZone } from '$lib/stores/zoneStore';
+	import { getPlayersInZone, getDecksInZone } from '$lib/stores/zoneStore';
 	import { formatTimestamp } from '$lib/utils/format';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import ChartWrapper from '$lib/components/ui/ChartWrapper.svelte';
 
+	let zone = $derived($currentZone);
 	let players: Player[] = $state([]);
 	let decks: Deck[] = $state([]);
 	let allRecords: GameRecord[] = $state([]);
@@ -19,9 +22,15 @@
 	let matchDataType: 'life' | 'damage_dealt' | 'damage_taken' = $state('life');
 
 	onMount(async () => {
+		if (!zone) { loading = false; return; }
 		try {
 			const ds = await getDataService();
-			[players, decks, allRecords, allLogs] = await Promise.all([ds.getPlayers(), ds.getDecks(), ds.getGameRecords(), ds.getAllLogEntries()]);
+			[players, decks, allRecords, allLogs] = await Promise.all([
+				getPlayersInZone(zone.id),
+				getDecksInZone(zone.id),
+				ds.getGameRecordsForZone(zone.id),
+				ds.getLogEntriesForZone(zone.id)
+			]);
 		} catch (e) { console.warn('Analytics load error', e); }
 		loading = false;
 	});

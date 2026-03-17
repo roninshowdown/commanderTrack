@@ -5,14 +5,23 @@
 /** MTG mana colors */
 export type MtgColor = 'white' | 'blue' | 'black' | 'red' | 'green';
 
-/** Player profile */
+/**
+ * Player — runtime view model, NOT a stored entity.
+ * Constructed from zone membership (name) + account profile (image).
+ * `id` = auth UID.
+ */
 export interface Player {
 	id: string;
 	name: string;
 	imageUrl?: string;
 }
 
-/** Deck belonging to a player */
+/** Account-level profile — no name (name is per-zone). */
+export interface AccountProfile {
+	imageUrl?: string;
+}
+
+/** Deck belonging to an account (playerId = auth UID) */
 export interface Deck {
 	id: string;
 	playerId: string;
@@ -107,6 +116,7 @@ export interface LogEntry {
 	type: 'life' | 'commander_damage';
 	sourcePlayerId?: string;
 	timestamp: number;
+	zoneId?: string;
 }
 
 /** Rank entry (computed, not stored) */
@@ -131,5 +141,39 @@ export interface GameRecord {
 	winnerId: string | null;
 	createdAt: number;
 	finishedAt: number | null;
+	zoneId: string;
+}
+
+/* ── Commander Zone ── */
+
+/** Zone membership role */
+export type ZoneRole = 'creator' | 'member';
+
+/** Per-zone member info (stored inside the zone document) */
+export interface ZoneMemberInfo {
+	displayName: string;
+	role: ZoneRole;
+	joinedAt: number;
+}
+
+/** Commander Zone — a play group that scopes games, stats, and rankings */
+export interface CommanderZone {
+	id: string;
+	name: string;
+	password?: string;
+	creatorId: string;
+	memberIds: string[];
+	members: Record<string, ZoneMemberInfo>;
+	createdAt: number;
+}
+
+/* ── Active Game Persistence ── */
+
+/** Persisted active game data (max one per account) */
+export interface ActiveGameData {
+	gameState: GameState;
+	logEntries: LogEntry[];
+	zoneId: string;
+	updatedAt: number;
 }
 

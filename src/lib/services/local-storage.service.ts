@@ -2,7 +2,7 @@
    LocalStorage Data Service
    ============================================ */
 
-import type { Player, Deck, GameRecord, LogEntry } from '$lib/models/types';
+import type { Player, Deck, GameRecord, LogEntry, AccountProfile, CommanderZone, ActiveGameData } from '$lib/models/types';
 import type { DataService } from './data-service.interface';
 import { uid } from '$lib/utils/format';
 import { isDebugMode } from '$lib/utils/env';
@@ -12,6 +12,9 @@ const KEYS = {
 	decks: 'ct_decks',
 	games: 'ct_games',
 	logs: 'ct_logs',
+	profiles: 'ct_profiles',
+	zones: 'ct_zones',
+	activeGames: 'ct_activeGames',
 	mockInit: 'ct_mock_initialized'
 } as const;
 
@@ -139,5 +142,87 @@ export class LocalStorageService implements DataService {
 	async getAllLogEntries(): Promise<LogEntry[]> {
 		return load<LogEntry>(KEYS.logs).sort((a, b) => b.timestamp - a.timestamp);
 	}
+
+	/* ── Account Profiles ── */
+	async getAccountProfile(uid_: string): Promise<AccountProfile | null> {
+		const map = loadMap<AccountProfile>(KEYS.profiles);
+		return map[uid_] ?? null;
+	}
+	async upsertAccountProfile(uid_: string, data: AccountProfile): Promise<void> {
+		const map = loadMap<AccountProfile>(KEYS.profiles);
+		map[uid_] = { ...map[uid_], ...data };
+		saveMap(KEYS.profiles, map);
+	}
+
+	/* ── Commander Zones ── */
+	async createZone(zone: Omit<CommanderZone, 'id'>): Promise<string> {
+		const list = load<CommanderZone>(KEYS.zones);
+		const id = uid();
+		list.push({ ...zone, id });
+		save(KEYS.zones, list);
+		return id;
+	}
+	async getZone(id: string): Promise<CommanderZone | null> {
+		return load<CommanderZone>(KEYS.zones).find((z) => z.id === id) ?? null;
+	}
+	async getAllZones(): Promise<CommanderZone[]> {
+		return load<CommanderZone>(KEYS.zones);
+	}
+	async getZonesForUser(uid_: string): Promise<CommanderZone[]> {
+		return load<CommanderZone>(KEYS.zones).filter((z) => z.memberIds.includes(uid_));
+	}
+	async updateZone(id: string, data: Partial<Omit<CommanderZone, 'id'>>): Promise<void> {
+		const list = load<CommanderZone>(KEYS.zones);
+		const idx = list.findIndex((z) => z.id === id);
+		if (idx !== -1) {
+			list[idx] = { ...list[idx], ...data };
+			save(KEYS.zones, list);
+		}
+	}
+	async deleteZone(id: string): Promise<void> {
+		save(KEYS.zones, load<CommanderZone>(KEYS.zones).filter((z) => z.id !== id));
+		save(KEYS.games, load<GameRecord>(KEYS.games).filter((g) => g.zoneId !== id));
+		save(KEYS.logs, load<LogEntry>(KEYS.logs).filter((l) => l.zoneId !== id));
+	}
+
+	/* ── Active Game Persistence ── */
+	async saveActiveGame(uid_: string, data: ActiveGameData): Promise<void> {
+		const map = loadMap<ActiveGameData>(KEYS.activeGames);
+		map[uid_] = data;
+		saveMap(KEYS.activeGames, map);
+	}
+	async getActiveGame(uid_: string): Promise<ActiveGameData | null> {
+		const map = loadMap<ActiveGameData>(KEYS.activeGames);
+		return map[uid_] ?? null;
+	}
+	async deleteActiveGame(uid_: string): Promise<void> {
+		const map = loadMap<ActiveGameData>(KEYS.activeGames);
+		delete map[uid_];
+		saveMap(KEYS.activeGames, map);
+	}
+
+	/* ── Zone-scoped queries ── */
+	async getGameRecordsForZone(zoneId: string): Promise<GameRecord[]> {
+		return load<GameRecord>(KEYS.games)
+			.filter((g) => g.zoneId === zoneId)
+			.sort((a, b) => b.createdAt - a.createdAt);
+	}
+	async getLogEntriesForZone(zoneId: string): Promise<LogEntry[]> {
+		return load<LogEntry>(KEYS.logs)
+			.filter((l) => l.zoneId === zoneId)
+			.sort((a, b) => b.timestamp - a.timestamp);
+	}
+}
+
+/* ── Map helpers for keyed storage (profiles, activeGames) ── */
+function loadMap<T>(key: string): Record<string, T> {
+	try {
+		return JSON.parse(localStorage.getItem(key) ?? '{}');
+	} catch {
+		return {};
+	}
+}
+function saveMap<T>(key: string, data: Record<string, T>): void {
+	localStorage.setItem(key, JSON.stringify(data));
 }
 

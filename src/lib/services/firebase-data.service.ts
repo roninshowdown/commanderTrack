@@ -3,11 +3,12 @@
    ============================================ */
 
 import {
-	collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
-	query, where, orderBy, type DocumentData, type Firestore
+	collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc, setDoc,
+	query, where, orderBy,
+	type DocumentData, type Firestore
 } from 'firebase/firestore';
 import { ensureFirebaseDb } from '$lib/firebase/config';
-import type { Player, Deck, GameRecord, LogEntry } from '$lib/models/types';
+import type { Player, Deck, GameRecord, LogEntry, AccountProfile, CommanderZone, ActiveGameData } from '$lib/models/types';
 import type { DataService } from './data-service.interface';
 
 function withTimeout<T>(p: Promise<T>, ms = 8000, label = 'Firestore'): Promise<T> {
@@ -99,6 +100,75 @@ export class FirebaseDataService implements DataService {
 	}
 	async getAllLogEntries(): Promise<LogEntry[]> {
 		const q = query(await this.col('gameLogs'), orderBy('timestamp', 'desc'));
+		const snap = await withTimeout(getDocs(q));
+		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LogEntry);
+	}
+
+	/* ── Account Profiles ── */
+	async getAccountProfile(uid: string): Promise<AccountProfile | null> {
+		const snap = await withTimeout(getDoc(doc(await this.db(), 'profiles', uid)));
+		return snap.exists() ? (snap.data() as AccountProfile) : null;
+	}
+	async upsertAccountProfile(uid: string, data: AccountProfile): Promise<void> {
+		await withTimeout(setDoc(doc(await this.db(), 'profiles', uid), data, { merge: true }));
+	}
+
+	/* ── Commander Zones ── */
+	async createZone(zone: Omit<CommanderZone, 'id'>): Promise<string> {
+		const r = await withTimeout(addDoc(await this.col('zones'), zone));
+		return r.id;
+	}
+	async getZone(id: string): Promise<CommanderZone | null> {
+		const snap = await withTimeout(getDoc(doc(await this.db(), 'zones', id)));
+		return snap.exists() ? ({ id: snap.id, ...snap.data() } as CommanderZone) : null;
+	}
+	async getAllZones(): Promise<CommanderZone[]> {
+		const snap = await withTimeout(getDocs(await this.col('zones')));
+		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CommanderZone);
+	}
+	async getZonesForUser(uid: string): Promise<CommanderZone[]> {
+		const q = query(await this.col('zones'), where('memberIds', 'array-contains', uid));
+		const snap = await withTimeout(getDocs(q));
+		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as CommanderZone);
+	}
+	async updateZone(id: string, data: Partial<Omit<CommanderZone, 'id'>>): Promise<void> {
+		await withTimeout(updateDoc(doc(await this.db(), 'zones', id), data as DocumentData));
+	}
+	async deleteZone(id: string): Promise<void> {
+		const db = await this.db();
+		// Cascade-delete games in this zone
+		const gamesQ = query(collection(db, 'games'), where('zoneId', '==', id));
+		const gamesSnap = await withTimeout(getDocs(gamesQ));
+		for (const g of gamesSnap.docs) {
+			// Delete logs for each game
+			const logsQ = query(collection(db, 'gameLogs'), where('gameId', '==', g.id));
+			const logsSnap = await getDocs(logsQ);
+			for (const l of logsSnap.docs) await deleteDoc(l.ref);
+			await deleteDoc(g.ref);
+		}
+		await deleteDoc(doc(db, 'zones', id));
+	}
+
+	/* ── Active Game Persistence ── */
+	async saveActiveGame(uid: string, data: ActiveGameData): Promise<void> {
+		await withTimeout(setDoc(doc(await this.db(), 'activeGames', uid), data as DocumentData));
+	}
+	async getActiveGame(uid: string): Promise<ActiveGameData | null> {
+		const snap = await withTimeout(getDoc(doc(await this.db(), 'activeGames', uid)));
+		return snap.exists() ? (snap.data() as ActiveGameData) : null;
+	}
+	async deleteActiveGame(uid: string): Promise<void> {
+		await withTimeout(deleteDoc(doc(await this.db(), 'activeGames', uid)));
+	}
+
+	/* ── Zone-scoped queries ── */
+	async getGameRecordsForZone(zoneId: string): Promise<GameRecord[]> {
+		const q = query(await this.col('games'), where('zoneId', '==', zoneId), orderBy('createdAt', 'desc'));
+		const snap = await withTimeout(getDocs(q));
+		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as GameRecord);
+	}
+	async getLogEntriesForZone(zoneId: string): Promise<LogEntry[]> {
+		const q = query(await this.col('gameLogs'), where('zoneId', '==', zoneId), orderBy('timestamp', 'desc'));
 		const snap = await withTimeout(getDocs(q));
 		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LogEntry);
 	}

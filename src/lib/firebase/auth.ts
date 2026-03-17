@@ -43,6 +43,7 @@ function createAuthStore(): Readable<AuthUser | null> & {
 
 			if (isDebugMode()) {
 				set(LOCAL_DEV_USER);
+				ensureProfile(LOCAL_DEV_USER.uid, null);
 				return;
 			}
 
@@ -59,7 +60,10 @@ function createAuthStore(): Readable<AuthUser | null> & {
 						import('$lib/firebase/config')
 					]);
 					const auth = await ensureFirebaseAuth();
-					onAuthStateChanged(auth, (user) => set(user));
+					onAuthStateChanged(auth, (user) => {
+						set(user);
+						if (user) ensureProfile(user.uid, user.photoURL);
+					});
 				} catch (e) {
 					console.error('[auth] Failed to initialize Firebase Auth:', e);
 					set(null);
@@ -67,6 +71,20 @@ function createAuthStore(): Readable<AuthUser | null> & {
 			})();
 		}
 	};
+}
+
+/** Create profile on first login (image only, no name) */
+async function ensureProfile(uid: string, photoURL: string | null): Promise<void> {
+	try {
+		const { getDataService } = await import('$lib/services/data-service');
+		const ds = await getDataService();
+		const existing = await ds.getAccountProfile(uid);
+		if (!existing) {
+			await ds.upsertAccountProfile(uid, { imageUrl: photoURL ?? undefined });
+		}
+	} catch (e) {
+		console.warn('[auth] Failed to ensure profile:', e);
+	}
 }
 
 export const authUser = createAuthStore();

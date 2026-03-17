@@ -2,9 +2,12 @@
 	import { onMount } from 'svelte';
 	import type { Player, Deck, GameRecord, RankEntry } from '$lib/models/types';
 	import { getDataService } from '$lib/services/data-service';
+	import { currentZone } from '$lib/stores/zoneStore';
+	import { getPlayersInZone, getDecksInZone } from '$lib/stores/zoneStore';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import ColorPip from '$lib/components/ui/ColorPip.svelte';
 
+	let zone = $derived($currentZone);
 	let players: Player[] = $state([]);
 	let decks: Deck[] = $state([]);
 	let records: GameRecord[] = $state([]);
@@ -13,9 +16,14 @@
 	let sortBy: 'won' | 'played' | 'lost' = $state('won');
 
 	onMount(async () => {
+		if (!zone) { loading = false; return; }
 		try {
 			const ds = await getDataService();
-			[players, decks, records] = await Promise.all([ds.getPlayers(), ds.getDecks(), ds.getGameRecords()]);
+			[players, decks, records] = await Promise.all([
+				getPlayersInZone(zone.id),
+				getDecksInZone(zone.id),
+				ds.getGameRecordsForZone(zone.id)
+			]);
 		} catch (e) { console.warn(e); }
 		loading = false;
 	});
