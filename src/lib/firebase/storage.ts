@@ -2,7 +2,6 @@
    Firebase Storage — Player image uploads
    ============================================ */
 
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { ensureFirebaseStorage, ensureFirebaseAuth } from '$lib/firebase/config';
 
 /**
@@ -10,6 +9,7 @@ import { ensureFirebaseStorage, ensureFirebaseAuth } from '$lib/firebase/config'
  * Returns the public download URL.
  */
 export async function uploadPlayerImage(file: File): Promise<string> {
+	const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
 	const storage = await ensureFirebaseStorage();
 	const auth = await ensureFirebaseAuth();
 	const uid = auth.currentUser?.uid ?? 'anon';

@@ -52,13 +52,19 @@ function createAuthStore(): Readable<AuthUser | null> & {
 				return;
 			}
 
-			import('firebase/auth').then(({ onAuthStateChanged }) => {
-				import('$lib/firebase/config').then(({ ensureFirebaseAuth }) => {
-					ensureFirebaseAuth().then((auth) => {
-						onAuthStateChanged(auth, (user) => set(user));
-					});
-				});
-			});
+			(async () => {
+				try {
+					const [{ onAuthStateChanged }, { ensureFirebaseAuth }] = await Promise.all([
+						import('firebase/auth'),
+						import('$lib/firebase/config')
+					]);
+					const auth = await ensureFirebaseAuth();
+					onAuthStateChanged(auth, (user) => set(user));
+				} catch (e) {
+					console.error('[auth] Failed to initialize Firebase Auth:', e);
+					set(null);
+				}
+			})();
 		}
 	};
 }
@@ -72,8 +78,10 @@ export async function signInWithGoogle(): Promise<void> {
 		authUser.set(LOCAL_DEV_USER);
 		return;
 	}
-	const { signInWithPopup, GoogleAuthProvider } = await import('firebase/auth');
-	const { ensureFirebaseAuth } = await import('$lib/firebase/config');
+	const [{ signInWithPopup, GoogleAuthProvider }, { ensureFirebaseAuth }] = await Promise.all([
+		import('firebase/auth'),
+		import('$lib/firebase/config')
+	]);
 	const auth = await ensureFirebaseAuth();
 	await signInWithPopup(auth, new GoogleAuthProvider());
 }
@@ -83,8 +91,10 @@ export async function signInWithEmail(email: string, password: string): Promise<
 		authUser.set(LOCAL_DEV_USER);
 		return;
 	}
-	const { signInWithEmailAndPassword } = await import('firebase/auth');
-	const { ensureFirebaseAuth } = await import('$lib/firebase/config');
+	const [{ signInWithEmailAndPassword }, { ensureFirebaseAuth }] = await Promise.all([
+		import('firebase/auth'),
+		import('$lib/firebase/config')
+	]);
 	const auth = await ensureFirebaseAuth();
 	await signInWithEmailAndPassword(auth, email, password);
 }
@@ -94,8 +104,10 @@ export async function registerWithEmail(email: string, password: string): Promis
 		authUser.set(LOCAL_DEV_USER);
 		return;
 	}
-	const { createUserWithEmailAndPassword } = await import('firebase/auth');
-	const { ensureFirebaseAuth } = await import('$lib/firebase/config');
+	const [{ createUserWithEmailAndPassword }, { ensureFirebaseAuth }] = await Promise.all([
+		import('firebase/auth'),
+		import('$lib/firebase/config')
+	]);
 	const auth = await ensureFirebaseAuth();
 	await createUserWithEmailAndPassword(auth, email, password);
 }
@@ -105,8 +117,10 @@ export async function signOut(): Promise<void> {
 		authUser.set(null);
 		return;
 	}
-	const { signOut: fbSignOut } = await import('firebase/auth');
-	const { ensureFirebaseAuth } = await import('$lib/firebase/config');
+	const [{ signOut: fbSignOut }, { ensureFirebaseAuth }] = await Promise.all([
+		import('firebase/auth'),
+		import('$lib/firebase/config')
+	]);
 	const auth = await ensureFirebaseAuth();
 	await fbSignOut(auth);
 }
