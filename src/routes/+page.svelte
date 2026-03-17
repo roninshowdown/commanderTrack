@@ -26,7 +26,7 @@
 
 <div class="home">
 	<div class="hero animate-fade-in">
-		<div class="logo-ring"><Icon name="swords" size={44} color="var(--color-primary)" /></div>
+		<div class="logo-ring"><img src="/icon-512.png" alt="Commander Track" class="app-icon" /></div>
 		<h1 class="title">COMMANDER<br /><span class="accent">TRACK</span></h1>
 		<p class="subtitle">LIFE · TIMER · ANALYTICS</p>
 	</div>
@@ -66,11 +66,10 @@
 					<div class="card-text"><span class="card-lbl">NEW GAME</span><span class="card-desc">Start tracking</span></div>
 				</a>
 			{/if}
-			<a href="/game" class="card"><div class="card-icon"><Icon name="swords" size={24} /></div><div class="card-text"><span class="card-lbl">GAME</span><span class="card-desc">Current match</span></div></a>
-			<a href="/log" class="card"><div class="card-icon"><Icon name="chart" size={24} /></div><div class="card-text"><span class="card-lbl">ANALYTICS</span><span class="card-desc">Stats & charts</span></div></a>
-			<a href="/rank" class="card"><div class="card-icon"><Icon name="trophy" size={24} /></div><div class="card-text"><span class="card-lbl">RANKINGS</span><span class="card-desc">Leaderboard</span></div></a>
-			<a href="/profile" class="card"><div class="card-icon"><Icon name="user" size={24} /></div><div class="card-text"><span class="card-lbl">PROFILE</span><span class="card-desc">Avatar & decks</span></div></a>
-			<a href="/zones" class="card"><div class="card-icon"><Icon name="settings" size={24} /></div><div class="card-text"><span class="card-lbl">ZONES</span><span class="card-desc">Commander Zones</span></div></a>
+			<a href="/log" class="card">
+				<div class="card-icon"><Icon name="chart" size={24} /></div>
+				<div class="card-text"><span class="card-lbl">ANALYTICS</span><span class="card-desc">Stats, rankings & charts</span></div>
+			</a>
 		</nav>
 	{/if}
 </div>
@@ -78,7 +77,8 @@
 <style>
 	.home{display:flex;flex-direction:column;align-items:center;gap:var(--space-xl);padding-top:var(--space-lg);min-height:80dvh}
 	.hero{text-align:center;display:flex;flex-direction:column;align-items:center}
-	.logo-ring{width:80px;height:80px;border-radius:var(--radius-xl);border:2px solid var(--neon-red);display:flex;align-items:center;justify-content:center;margin-bottom:var(--space-md);box-shadow:var(--glow-primary);background:var(--color-primary-dim);animation:neon-flicker 6s infinite}
+	.logo-ring{width:96px;height:96px;border-radius:var(--radius-xl);display:flex;align-items:center;justify-content:center;margin-bottom:var(--space-md);overflow:hidden}
+	.app-icon{width:100%;height:100%;object-fit:contain;border-radius:var(--radius-xl);filter:drop-shadow(0 0 12px rgba(232,25,59,.45))}
 	.title{font-size:1.6rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase;line-height:1.15}
 	.accent{color:var(--color-primary);text-shadow:0 0 20px rgba(232,25,59,.5)}
 	.subtitle{margin-top:var(--space-sm);font-size:.65rem;font-weight:700;letter-spacing:.25em;color:var(--color-text-muted);text-transform:uppercase}
@@ -87,7 +87,7 @@
 	.landing-msg strong{color:var(--color-secondary)}
 	.resume-banner{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-sm) var(--space-md);background:rgba(255,171,0,.1);border:1px solid rgba(255,171,0,.3);border-radius:var(--radius-lg);font-size:.75rem;color:var(--color-warning);width:100%;max-width:400px}
 	.resume-link{color:var(--color-secondary);font-weight:800;font-size:.75rem;margin-left:auto;white-space:nowrap}
-	.grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-sm);width:100%;max-width:400px}
+	.grid{display:flex;flex-direction:column;gap:var(--space-sm);width:100%;max-width:400px}
 	.card{display:flex;align-items:center;gap:var(--space-md);padding:var(--space-md) var(--space-lg);background:var(--color-surface);border:1px solid var(--color-surface-elevated);border-radius:var(--radius-lg);text-decoration:none;color:var(--color-text);transition:all var(--transition-fast)}
 	.card:hover{border-color:var(--neon-red);box-shadow:var(--glow-primary);transform:translateY(-1px)}
 	.card--primary{grid-column:1/-1;background:var(--color-primary-dim);border-color:var(--neon-red);box-shadow:var(--glow-primary);padding:var(--space-lg)}

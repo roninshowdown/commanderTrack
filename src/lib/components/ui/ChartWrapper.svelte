@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { Chart, registerables } from 'chart.js';
 
 	Chart.register(...registerables);
@@ -9,10 +9,11 @@
 
 	let canvas: HTMLCanvasElement;
 	let chart: Chart | null = null;
+	let mounted = false;
 
 	function render() {
-		if (chart) chart.destroy();
 		if (!canvas || !data) return;
+		if (chart) { chart.destroy(); chart = null; }
 		chart = new Chart(canvas, {
 			type: type as any,
 			data,
@@ -30,14 +31,19 @@
 		});
 	}
 
-	onMount(render);
-	onDestroy(() => chart?.destroy());
+	onMount(() => {
+		mounted = true;
+		render();
+	});
+	onDestroy(() => { chart?.destroy(); chart = null; });
 
 	$effect(() => {
-		// re-render when data or type changes
+		// re-render when data or type changes (but skip initial — onMount handles it)
 		void data;
 		void type;
-		render();
+		if (mounted) {
+			tick().then(render);
+		}
 	});
 </script>
 

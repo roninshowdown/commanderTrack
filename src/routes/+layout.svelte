@@ -69,12 +69,6 @@
 		await signOut();
 	}
 
-	async function handleSwitchAccount() {
-		showAvatarDropdown = false;
-		resetZoneStore();
-		await signOut();
-		// User sees login screen and can sign in as another account
-	}
 
 	function handleZoneSwitch(zoneId: string) {
 		switchZone(zoneId);
@@ -122,7 +116,7 @@
 		</div>
 	{:else}
 		<!-- ── Authenticated shell ── -->
-		<header class="top-bar animate-fade-in">
+		<header class="top-bar animate-fade-in" class:landscape-hide={isGamePage}>
 			{#if !isHome}
 				<a href="/" class="back-btn"><Icon name="back" size={20} /><span>Menu</span></a>
 			{:else}
@@ -148,9 +142,9 @@
 									</button>
 								{/each}
 								<div class="dropdown-divider"></div>
-								<button class="dropdown-item" onclick={() => { showZoneDropdown = false; goto('/zones'); }}>
-									New…
-								</button>
+							<button class="dropdown-item" onclick={() => { showZoneDropdown = false; goto('/zones'); }}>
+								<Icon name="settings" size={14} /> Edit
+							</button>
 							</div>
 						{/if}
 					</div>
@@ -168,16 +162,16 @@
 					{#if showAvatarDropdown}
 						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 						<div class="dropdown avatar-dropdown" onclick={(e) => e.stopPropagation()}>
-							<div class="dropdown-header">
-								{user?.email ?? user?.displayName ?? 'Player'}
-							</div>
-							<div class="dropdown-divider"></div>
-							<button class="dropdown-item" onclick={handleSignOut}>
-								<Icon name="sign-out" size={14} /> Sign Out
-							</button>
-							<button class="dropdown-item" onclick={handleSwitchAccount}>
-								<Icon name="sign-in" size={14} /> Switch Account
-							</button>
+						<div class="dropdown-header">
+							{user?.email ?? user?.displayName ?? 'Player'}
+						</div>
+						<div class="dropdown-divider"></div>
+						<button class="dropdown-item" onclick={() => { showAvatarDropdown = false; goto('/profile'); }}>
+							<Icon name="user" size={14} /> Profile
+						</button>
+						<button class="dropdown-item" onclick={handleSignOut}>
+							<Icon name="sign-out" size={14} /> Sign Out
+						</button>
 						</div>
 					{/if}
 				</div>
@@ -243,6 +237,12 @@
 	.app-main { flex: 1; padding: var(--space-md); padding-bottom: calc(var(--space-lg) + env(safe-area-inset-bottom, 0px)); max-width: 600px; margin: 0 auto; width: 100%; overflow-x: hidden; }
 	.app-main.has-header { padding-top: var(--space-sm); }
 	.app-main.game-page { max-width: 100%; }
+
+	/* ── Landscape game mode: hide top bar ── */
+	@media (orientation: landscape) and (max-height: 500px) {
+		.top-bar.landscape-hide { display: none; }
+		.app-main.game-page { padding: var(--space-xs); padding-bottom: env(safe-area-inset-bottom, 0px); }
+	}
 </style>
 
 

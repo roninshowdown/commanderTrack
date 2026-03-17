@@ -81,5 +81,21 @@
 	.badge-react{background:var(--color-secondary-dim);color:var(--color-secondary)}
 	.cmd-bar{display:flex;gap:4px;justify-content:center;margin-top:2px}
 	.cmd-pip{background:var(--color-primary-dim);color:var(--color-primary);font-size:.55rem;font-weight:800;padding:1px 5px;border-radius:var(--radius-full)}
+
+	/* ── Landscape compact ── */
+	@media (orientation: landscape) and (max-height: 500px) {
+		.tile { min-height: unset; }
+		.content { padding: var(--space-xs); gap: 2px; }
+		.pname { font-size: .6rem; }
+		.cname { font-size: .5rem; }
+		.life-ctrl { padding: 2px 0; gap: var(--space-xs); }
+		.life-btn { width: 28px; height: 28px; font-size: 1rem; min-height: unset; }
+		.life-val { font-size: 1.3rem; min-width: 36px; }
+		.footer { gap: 2px; }
+		.pool { font-size: .55rem; }
+		.badge { font-size: .4rem; padding: 1px 4px; }
+		.dead-overlay { padding: var(--space-xs) 0; }
+		.cmd-bar { margin-top: 0; }
+	}
 </style>
 

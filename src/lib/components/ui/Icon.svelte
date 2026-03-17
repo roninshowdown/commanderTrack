@@ -32,6 +32,9 @@
 		'line-chart': 'M3 3v18h18M7 16l4-8 4 4 6-10',
 		'bar-chart': 'M12 20V10M18 20V4M6 20v-4',
 		'pie-chart': 'M21.21 15.89A10 10 0 118 2.83M22 12A10 10 0 0012 2v10z',
+		'chevron-up': 'M18 15l-6-6-6 6',
+		'chevron-down': 'M6 9l6 6 6-6',
+		menu: 'M3 12h18M3 6h18M3 18h18',
 	};
 </script>
 

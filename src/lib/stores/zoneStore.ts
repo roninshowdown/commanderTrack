@@ -191,3 +191,30 @@ export function resetZoneStore(): void {
 	localStorage.removeItem(CURRENT_ZONE_KEY);
 }
 
+/** Remove a member from a zone (creator-only). */
+export async function removeMemberFromZone(
+	callerUid: string,
+	zoneId: string,
+	targetUid: string
+): Promise<boolean> {
+	try {
+		const ds = await getDataService();
+		const zone = await ds.getZone(zoneId);
+		if (!zone) return false;
+		if (zone.creatorId !== callerUid) return false; // only creator
+		if (targetUid === zone.creatorId) return false; // cannot remove creator
+		if (!zone.memberIds.includes(targetUid)) return false;
+		const updatedMembers = { ...zone.members };
+		delete updatedMembers[targetUid];
+		await ds.updateZone(zoneId, {
+			memberIds: zone.memberIds.filter((id) => id !== targetUid),
+			members: updatedMembers
+		});
+		await loadUserZones(callerUid);
+		return true;
+	} catch (e) {
+		console.warn('[zoneStore] Failed to remove member:', e);
+		return false;
+	}
+}
+

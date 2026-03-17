@@ -6,7 +6,8 @@
 	import { getDataService } from '$lib/services/data-service';
 	import {
 		userZones, currentZoneId,
-		loadUserZones, createZone, joinZone, leaveZone, deleteZone, switchZone
+		loadUserZones, createZone, joinZone, leaveZone, deleteZone, switchZone,
+		removeMemberFromZone
 	} from '$lib/stores/zoneStore';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
@@ -34,6 +35,25 @@
 	let joinPassword: string = $state('');
 	let joiningZoneId: string | null = $state(null);
 	let joining: boolean = $state(false);
+
+	/* Expand/collapse members */
+	let expandedZoneId: string | null = $state(null);
+
+	function toggleExpand(zoneId: string) {
+		expandedZoneId = expandedZoneId === zoneId ? null : zoneId;
+	}
+
+	async function handleRemoveMember(zoneId: string, targetUid: string, displayName: string) {
+		if (!confirm(`Remove "${displayName}" from this zone?`)) return;
+		const ok = await removeMemberFromZone(uid, zoneId, targetUid);
+		if (ok) {
+			toast = { message: `${displayName} removed`, type: 'success' };
+			const ds = await getDataService();
+			allZones = await ds.getAllZones();
+		} else {
+			toast = { message: 'Failed to remove member', type: 'error' };
+		}
+	}
 
 	onMount(async () => {
 		await loadUserZones(uid);
@@ -157,6 +177,9 @@
 							</span>
 						</div>
 						<div class="zone-actions">
+							<button class="expand-btn" onclick={() => toggleExpand(z.id)} title="Show members">
+								<Icon name={expandedZoneId === z.id ? 'chevron-up' : 'chevron-down'} size={16} />
+							</button>
 							{#if z.id !== curZoneId}
 								<Button variant="secondary" size="sm" onclick={() => switchZone(z.id)}>{#snippet children()}Select{/snippet}</Button>
 							{:else}
@@ -168,6 +191,21 @@
 								<Button variant="ghost" size="sm" onclick={() => handleLeave(z.id)}>{#snippet children()}Leave{/snippet}</Button>
 							{/if}
 						</div>
+						{#if expandedZoneId === z.id}
+							<div class="member-list">
+								{#each Object.entries(z.members) as [memberUid, info]}
+									<div class="member-row">
+										<span class="member-name">{info.displayName}</span>
+										<span class="member-role">{info.role}</span>
+										{#if z.creatorId === uid && memberUid !== z.creatorId}
+											<button class="member-remove" onclick={() => handleRemoveMember(z.id, memberUid, info.displayName)}>
+												<Icon name="trash" size={12} color="var(--color-danger)" />
+											</button>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				{/each}
 			</div>
@@ -241,6 +279,15 @@
 	.zone-meta { font-size: .65rem; color: var(--color-text-muted); }
 	.zone-actions { display: flex; gap: var(--space-xs); align-items: center; }
 	.active-badge { padding: 4px 10px; border-radius: var(--radius-full); background: rgba(0, 230, 118, .15); color: var(--color-success); font-size: .65rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+	.expand-btn { width: 32px; height: 32px; min-height: unset; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); background: var(--color-surface-elevated); transition: all var(--transition-fast); }
+	.expand-btn:hover { background: var(--color-surface-hover); }
+	.member-list { width: 100%; display: flex; flex-direction: column; gap: 2px; margin-top: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--color-surface-elevated); animation: fade-in 0.2s ease; }
+	.member-row { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); }
+	.member-row:hover { background: var(--color-surface-hover); }
+	.member-name { flex: 1; font-size: .75rem; font-weight: 600; }
+	.member-role { font-size: .6rem; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+	.member-remove { width: 28px; height: 28px; min-height: unset; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all var(--transition-fast); }
+	.member-remove:hover { background: rgba(255, 23, 68, .15); }
 	.join-form { width: 100%; display: flex; flex-direction: column; gap: var(--space-sm); margin-top: var(--space-sm); }
 	.join-btns { display: flex; gap: var(--space-sm); }
 	.create-section { display: flex; flex-direction: column; gap: var(--space-md); }

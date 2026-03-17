@@ -73,6 +73,9 @@
 		<TimerDisplay state={$gameState} currentTickingTime={$currentTickingTime} isCritical={$isTimerCritical} />
 
 		<div class="controls">
+			<Button variant="ghost" size="sm" onclick={() => goto('/')}>
+				{#snippet children()}<Icon name="menu" size={14}/> Menu{/snippet}
+			</Button>
 			<Button variant={$isGameRunning?'danger':'primary'} size="sm" onclick={toggleStartStop}>
 				{#snippet children()}<Icon name={$gameState.timerInfo.phase==='IDLE'?'play':$isGameRunning?'pause':'play'} size={14}/> {$gameState.timerInfo.phase==='IDLE'?'Start':$isGameRunning?'Pause':'Resume'}{/snippet}
 			</Button>
@@ -141,6 +144,15 @@
 	.winner-opt:hover{border-color:var(--neon-cyan);box-shadow:var(--glow-cyan)}
 	.winner-img{width:40px;height:30px;border-radius:var(--radius-sm);object-fit:cover}
 	.winner-opt strong{font-size:.85rem;display:block}.winner-opt span{font-size:.7rem;color:var(--color-text-muted)}
+
+	/* ── Landscape compact mode ── */
+	@media (orientation: landscape) and (max-height: 500px) {
+		.game-page { gap: var(--space-xs); height: 100dvh; overflow: hidden; padding-top: 0; }
+		.controls { gap: 2px; flex-wrap: nowrap; }
+		.controls :global(button) { min-height: 32px; padding: 4px 8px; font-size: .6rem; }
+		.tile-grid { flex: 1; min-height: 0; overflow-x: auto; overflow-y: hidden; gap: var(--space-xs); padding-bottom: 0; align-items: stretch; }
+		.tile-grid :global(.tile) { flex: 0 0 min(160px, 30vw); min-height: unset; }
+	}
 </style>
 
 

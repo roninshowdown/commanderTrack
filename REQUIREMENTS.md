@@ -249,35 +249,39 @@
 
 **REQ-LOG-008:** The event log shall display a scrollable (max 400px height) list of log entries, each showing timestamp (HH:MM:SS), player name, event type badge (LIFE or CMD), and value with color coding (green for positive, red for negative).
 
-### 9.2 Player Dashboard
+### 9.2 Overall Dashboard (replaces Player + Global tabs)
 
-**REQ-LOG-009:** The analytics page shall provide a "Player" tab allowing selection of a player to view individual statistics.
+**REQ-LOG-009:** The analytics page shall provide an "Overall" tab with a player filter dropdown (default: "All Players"). When "All Players" is selected, zone-wide statistics and rankings are shown. When a specific player is selected, that player's individual stats are shown.
 
 **REQ-LOG-010:** Player statistics shall include: total games played, wins, losses, and win rate (percentage).
 
-**REQ-LOG-011:** The player dashboard shall display a doughnut chart showing wins, losses, and draws distribution.
+**REQ-LOG-011:** The player drill-down shall display a doughnut chart showing wins, losses, and draws distribution.
 
-**REQ-LOG-012:** The player dashboard shall display a bar chart showing games played per deck.
+**REQ-LOG-012:** The player drill-down shall display a bar chart showing games played per deck.
 
-**REQ-LOG-013:** The player dashboard shall display a detailed deck breakdown table showing each deck's name, games played, wins, and losses.
+**REQ-LOG-013:** The player drill-down shall display a detailed deck breakdown table showing each deck's name, games played, wins, and losses.
 
-### 9.3 Global Dashboard
+### 9.3 Global Statistics & Rankings (shown when "All Players" is selected in Overall tab)
 
-**REQ-LOG-014:** The analytics page shall provide a "Global" tab showing aggregate statistics across all games and players.
+**REQ-LOG-014:** The Overall tab with "All Players" selected shall show aggregate statistics across all games and players within the Commander Zone.
 
 **REQ-LOG-015:** Global statistics shall display summary cards for total games, total players, and total decks.
 
-**REQ-LOG-016:** The global dashboard shall display a bar chart of "Most Wins" per player sorted descending.
+**REQ-LOG-016:** The global view shall display a bar chart of "Most Wins" per player sorted descending.
 
-**REQ-LOG-017:** The global dashboard shall display a bar chart of "Games Per Player" sorted descending.
+**REQ-LOG-017:** The global view shall display a bar chart of "Games Per Player" sorted descending.
 
-**REQ-LOG-018:** The global dashboard shall display a doughnut chart of "Deck Usage" showing the top 10 most-used decks.
+**REQ-LOG-018:** The global view shall display a doughnut chart of "Deck Usage" showing the top 10 most-used decks.
+
+**REQ-LOG-019:** The global view shall display integrated rankings with Players/Decks sub-tabs and sort controls (Won, Played, Lost). The #1 ranked entry shall display a crown icon.
 
 ---
 
-## 10. Rankings
+## 10. Rankings (integrated into Analytics — see REQ-LOG-019)
 
-**REQ-RANK-001:** The system shall provide a rankings page with two tabs: Players and Decks.
+> Rankings are now displayed within the Analytics page "Overall" tab under "All Players" view. The standalone `/rank` route is deprecated.
+
+**REQ-RANK-001:** Rankings shall be displayed within the Analytics "Overall" tab with two sub-tabs: Players and Decks.
 
 **REQ-RANK-002:** Player rankings shall display each player's games played, games won, games lost, and win rate percentage.
 
@@ -311,7 +315,7 @@
 
 **REQ-AUTH-007:** All application sections (Admin, Game Setup, Game, Analytics, Rankings) shall require authentication. Unauthenticated access attempts shall redirect the user to the login screen.
 
-**REQ-AUTH-008:** The home page shall display the current user's name, avatar (if available), and a sign-out button when authenticated.
+**REQ-AUTH-008:** The authenticated top bar shall display the current user's avatar with a dropdown menu containing: Profile link (navigating to `/profile`), and Sign Out button. The zone tag shall include a dropdown for zone switching and an "Edit" link (navigating to `/zones`).
 
 **REQ-AUTH-009:** The home page shall display a "DEV MODE" badge when Developer/Debug Mode is active instead of requiring login.
 
@@ -429,7 +433,7 @@
 
 ### 15.2 Layout & Navigation
 
-**REQ-UI-007:** The home page shall display the app title, authentication status, and a navigation grid with cards linking to: New Game (setup), Game, Analytics (log), Rankings (rank), and Admin.
+**REQ-UI-007:** The home page shall display the app title, authentication status, and a navigation layout with two cards: a primary card linking to New Game (setup) or Resume Game (game), and an Analytics card (log) that includes integrated rankings.
 
 **REQ-UI-008:** All non-home pages shall display a sticky top bar with a "← Menu" back button that navigates to the home page.
 
@@ -532,6 +536,34 @@
 **REQ-DEPLOY-007:** An environment switching script (`scripts/switch-env.js`) shall be provided to easily toggle between debug and firebase environment configurations.
 
 **REQ-DEPLOY-008:** The system shall use Svelte 5 with runes reactivity (`$state`, `$derived`, `$props`, `$effect`), SvelteKit 2, Vite 5, and TypeScript 5.
+
+---
+
+## 19. Commander Zones
+
+**REQ-ZONE-001:** Users can create, join, browse, leave, and delete Commander Zones. Zones scope all games, stats, and rankings.
+
+**REQ-ZONE-002:** Zone names must be globally unique (case-insensitive). Users may belong to a maximum of 5 zones. Zones may have up to 20 members.
+
+**REQ-ZONE-003:** Each zone member has a display name (unique within the zone) and a role (creator or member).
+
+**REQ-ZONE-004:** The zone creator can delete the zone (cascade-deletes all games and logs). The creator cannot leave their own zone.
+
+**REQ-ZONE-005:** The zone tag in the header shall include a dropdown for switching zones and an "Edit" link (with settings icon) navigating to the zones management page.
+
+**REQ-ZONE-010:** Zone cards in the "My Zones" tab shall show an expand/collapse control that reveals a list of all member display names and roles.
+
+**REQ-ZONE-011:** The zone creator shall be able to remove any non-creator member from the zone via a remove button in the expanded member list.
+
+---
+
+## 20. Landscape Game Optimization
+
+**REQ-UI-027:** In landscape orientation on viewports ≤ 500px height, the game page shall fit within the viewport without vertical scrolling.
+
+**REQ-UI-028:** In landscape game mode, the top navigation bar shall be hidden. A "Menu" button shall be added to the game controls to provide navigation back to the home page.
+
+**REQ-UI-029:** In landscape game mode, player tiles, timer display, and game controls shall use compact sizing (reduced min-heights, smaller fonts, icon-only controls where appropriate).
 
 ---
 

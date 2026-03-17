@@ -24,5 +24,13 @@
 	.value{font-size:1.8rem;font-weight:800;font-family:var(--font-mono);font-variant-numeric:tabular-nums;line-height:1}
 	.value.pulsing{color:var(--color-danger);animation:pulse 1s infinite}
 	.meta{font-size:.55rem;font-weight:600;color:var(--color-text-muted);letter-spacing:.06em;text-transform:uppercase}
+
+	/* ── Landscape compact ── */
+	@media (orientation: landscape) and (max-height: 500px) {
+		.timer { flex-direction: row; gap: var(--space-sm); padding: var(--space-xs) var(--space-md); }
+		.phase { font-size: .5rem; }
+		.value { font-size: 1rem; }
+		.meta { font-size: .45rem; }
+	}
 </style>
 
