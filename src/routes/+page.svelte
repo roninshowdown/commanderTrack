@@ -74,17 +74,9 @@
 					<div class="card-text"><span class="card-lbl">NEW GAME</span><span class="card-desc">Start tracking</span></div>
 				</a>
 			{/if}
-			<a href="/share" class="card">
-				<div class="card-icon"><Icon name="qr" size={24} /></div>
-				<div class="card-text"><span class="card-lbl">SHARE APP</span><span class="card-desc">Open QR code</span></div>
-			</a>
-			<a href="/log" class="card">
-				<div class="card-icon"><Icon name="chart" size={24} /></div>
-				<div class="card-text"><span class="card-lbl">ANALYTICS</span><span class="card-desc">Stats, rankings & charts</span></div>
-			</a>
 			<a href="/analytics-v2" class="card">
 				<div class="card-icon"><Icon name="line-chart" size={24} /></div>
-				<div class="card-text"><span class="card-lbl">ANALYTICS V2</span><span class="card-desc">Isolated rewrite draft</span></div>
+				<div class="card-text"><span class="card-lbl">ANALYTICS</span><span class="card-desc">Stats, rankings & charts</span></div>
 			</a>
 			<a href="/settings" class="card">
 				<div class="card-icon"><Icon name="settings" size={24} /></div>

@@ -152,14 +152,42 @@
 
 	let wakeLockSentinel: { release: () => Promise<void> } | null = null;
 
-	const CLOCKWISE_ORDER = [0, 1, 3, 2];
-	const CMD_PICK_ANGLES = [135, 45, 315, 225]; // TL, TR, BR, BL — matches CLOCKWISE_ORDER tile layout
+	/* ── Layouts per player count ──
+	 * Each entry maps slot-index -> { gridArea, seat, upsideDown, cmdAngle }
+	 */
+	type SeatLayout = { gridArea: string; seat: 'tl' | 'tr' | 'br' | 'bl'; upsideDown: boolean; cmdAngle: number };
+	const LAYOUTS: Record<number, SeatLayout[]> = {
+		2: [
+			{ gridArea: '1 / 1 / 2 / 2', seat: 'tl', upsideDown: true, cmdAngle: 90 },
+			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 270 }
+		],
+		3: [
+			{ gridArea: '1 / 1 / 2 / 3', seat: 'tl', upsideDown: true, cmdAngle: 90 },
+			{ gridArea: '2 / 2 / 3 / 3', seat: 'br', upsideDown: false, cmdAngle: 315 },
+			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 }
+		],
+		4: [
+			{ gridArea: '1 / 1 / 2 / 2', seat: 'tl', upsideDown: true, cmdAngle: 135 },
+			{ gridArea: '1 / 2 / 2 / 3', seat: 'tr', upsideDown: true, cmdAngle: 45 },
+			{ gridArea: '2 / 2 / 3 / 3', seat: 'br', upsideDown: false, cmdAngle: 315 },
+			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 }
+		],
+		5: [
+			{ gridArea: '1 / 1 / 2 / 2', seat: 'tl', upsideDown: true, cmdAngle: 135 },
+			{ gridArea: '1 / 2 / 2 / 3', seat: 'tr', upsideDown: true, cmdAngle: 90 },
+			{ gridArea: '2 / 2 / 3 / 3', seat: 'br', upsideDown: false, cmdAngle: 315 },
+			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 },
+			{ gridArea: '1 / 3 / 3 / 4', seat: 'tr', upsideDown: false, cmdAngle: 0 }
+		]
+	};
+
+	function getLayout(): SeatLayout[] {
+		const n = $gameState?.players.length ?? 4;
+		return LAYOUTS[n] ?? LAYOUTS[4];
+	}
 
 	function seatPositionForIndex(idx: number): 'tl' | 'tr' | 'br' | 'bl' {
-		if (idx === 0) return 'tl';
-		if (idx === 1) return 'tr';
-		if (idx === 2) return 'br';
-		return 'bl';
+		return getLayout()[idx]?.seat ?? 'tl';
 	}
 
 
@@ -318,7 +346,8 @@
 		timerVariant === 'B' ||
 		(timerVariant === 'A' && !!($gameState?.config.timerConfig as TimerConfigA | undefined)?.enableReaction)
 	);
-	let isFourPlayer = $derived(($gameState?.players.length ?? 0) === 4);
+	let playerCount = $derived($gameState?.players.length ?? 0);
+	let hasUnifiedLayout = $derived(playerCount >= 2 && playerCount <= 5);
 	let hasReactivePlayer = $derived(($gameState?.reactivePlayerIndices ?? []).length > 0);
 	let isCenterPoolDrain = $derived(
 		!!$gameState &&
@@ -584,8 +613,8 @@
 			<Button variant="primary" size="lg" onclick={startAnotherGame}>{#snippet children()}<Icon name="play" size={16}/> New Game{/snippet}</Button>
 		</div>
 	{:else}
-		{#if isFourPlayer}
-			<div class="battlefield">
+		{#if hasUnifiedLayout}
+			<div class="battlefield bf-{playerCount}">
 				{#if showWheel}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<div class="battlefield-overlay" role="presentation" onclick={() => closeWheel()}></div>
@@ -602,7 +631,7 @@
 				{/if}
 				{#each $gameState.players as p, i}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<div class="slot" style="order:{CLOCKWISE_ORDER[i]}" data-seat-index={i}>
+					<div class="slot" style="grid-area:{getLayout()[i]?.gridArea ?? 'auto'}" data-seat-index={i}>
 						{#if revivePromptIndex === i}
 							<div class="tile-toast animate-fade-in">
 								<span>Revive with 1 HP?</span>
@@ -619,12 +648,12 @@
 							commanderDamageMode={$commanderDamageMode}
 							commanderDamageSource={false}
 							cmdSourcePlayerId={cmdSourcePid}
-							upsideDown={i < 2}
+							upsideDown={getLayout()[i]?.upsideDown ?? false}
 							showStatusBadges={false}
 							minimalMode={startPhase !== 'playing'}
 							selectedToMove={moveCandidateIndex === i && isIdle}
 							seatPosition={seatPositionForIndex(i)}
-							highlightGold={moveCandidateIndex === i && isIdle}
+							highlightGold={(moveCandidateIndex === i && isIdle) || (randomPickActive && randomPickIdx === i)}
 							onlifechange={(amt: number)=>handleLifeChange(i,amt)}
 							onrevive={() => requestRevive(i)}
 							onclick={()=>handleTileClick(i)} />
@@ -706,7 +735,7 @@
 					{#if showWheel && showCmdPicker && $gameState}
 						<div class="wheel-actions">
 							{#each $gameState.players as cp, ci}
-								<button class="wheel-btn cmd-pick-btn" style="--angle:{CMD_PICK_ANGLES[ci]}deg;--dist:168px" title={cp.commanderName}
+							<button class="wheel-btn cmd-pick-btn" style="--angle:{getLayout()[ci]?.cmdAngle ?? 0}deg;--dist:168px" title={cp.commanderName}
 									onclick={() => selectCmdSource(ci)}>
 									{#if cp.commanderImageUrl}
 										<img class="cmd-pick-img" src={cp.commanderImageUrl} alt={cp.commanderName} />
@@ -728,57 +757,7 @@
 				{/if}
 			</div>
 		{:else}
-			{#if $gameState.config.timerConfig.variant !== 'none'}
-				<TimerDisplay state={$gameState} currentTickingTime={$currentTickingTime} isCritical={$isTimerCritical} />
-			{:else}
-				<div class="turn-info">Round {$gameState.currentRound} · Turn {$gameState.turnCount + 1}</div>
-			{/if}
-
-			<div class="controls">
-				{#if $gameState.config.timerConfig.variant !== 'none'}
-					<Button variant={$isGameRunning?'danger':'primary'} size="sm" onclick={toggleStartStop} disabled={showGameLogModal}>
-						{#snippet children()}<Icon name={$gameState.timerInfo.phase==='IDLE'?'play':$isGameRunning?'pause':'play'} size={14}/> {$gameState.timerInfo.phase==='IDLE'?'Start':$isGameRunning?'Pause':'Resume'}{/snippet}
-					</Button>
-				{/if}
-				<Button variant="ghost" size="sm" onclick={handleNextTurn} disabled={showGameLogModal || $gameState.timerInfo.phase==='IDLE'}>
-					{#snippet children()}<Icon name="next" size={14}/> Next Turn{/snippet}
-				</Button>
-			{#if hasReactionControls}
-				{#if ($gameState.reactivePlayerIndices ?? []).length > 0}
-						<Button variant="secondary" size="sm" onclick={handleReturnPriority} disabled={showGameLogModal}>{#snippet children()}<Icon name="return" size={14}/> Return{/snippet}</Button>
-					{:else if timerVariant === 'B'}
-						<Button variant="ghost" size="sm" onclick={beginRandomPick} disabled={showGameLogModal}>{#snippet children()}<Icon name="dice" size={14}/> Random Opp.{/snippet}</Button>
-					{/if}
-				{/if}
-				<Button variant={$commanderDamageMode?'danger':'ghost'} size="sm" onclick={toggleCommanderDamageMode} disabled={showGameLogModal}>
-					{#snippet children()}<Icon name="crosshair" size={14}/> CMD{/snippet}
-				</Button>
-				<Button variant="danger" size="sm" onclick={openWinnerModal} disabled={showGameLogModal}>
-					{#snippet children()}<Icon name="trophy" size={14}/> Finish{/snippet}
-				</Button>
-				<Button variant="ghost" size="sm" onclick={openGameLogModal} disabled={showGameLogModal}>
-					{#snippet children()}<Icon name="search" size={14}/> Logs{/snippet}
-				</Button>
-			</div>
-
-			<div class="tile-grid">
-				{#each $gameState.players as p, i}
-					<PlayerTile player={p} playerIndex={i}
-						isActive={i===$gameState.activePlayerIndex}
-					isReactive={!randomPickActive && ($gameState.reactivePlayerIndices ?? []).includes(i)}
-					isTimerTicking={i===$gameState.timerInfo.targetPlayerIndex && $isGameRunning}
-						isPulsing={i===$gameState.timerInfo.targetPlayerIndex && $isTimerCritical}
-						isDead={p.isDead}
-						showPool={$gameState.config.timerConfig.variant !== 'none'}
-						commanderDamageMode={$commanderDamageMode}
-						commanderDamageSource={false}
-						cmdSourcePlayerId={cmdSourcePid}
-						highlightGold={randomPickActive && randomPickIdx === i}
-						onlifechange={(amt: number)=>handleLifeChange(i,amt)}
-						onrevive={() => requestRevive(i)}
-						onclick={()=>handleTileClick(i)} />
-				{/each}
-			</div>
+			<div class="no-game"><p>Unsupported player count: {playerCount}.</p><Button variant="primary" onclick={() => goto('/setup')}>{#snippet children()}<Icon name="play" size={16}/> Setup a Game{/snippet}</Button></div>
 		{/if}
 
 		<Modal bind:open={showWinnerModal} title="Select Winner">
@@ -830,7 +809,11 @@
 
 <style>
 	.game-page{padding-top:var(--space-sm);display:flex;flex-direction:column;gap:var(--space-md);max-width:100%;height:100%}
-	.battlefield{position:relative;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:var(--space-xs);flex:1;min-height:0}
+	.battlefield{position:relative;display:grid;gap:var(--space-xs);flex:1;min-height:0}
+	.battlefield.bf-2{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+	.battlefield.bf-3{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+	.battlefield.bf-4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+	.battlefield.bf-5{grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr}
 	.slot{min-width:0;min-height:0;position:relative}
 	.slot :global(.tile){height:100%;min-height:unset}
 	.tile-toast{position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:8px;background:rgba(8,8,13,.92);border:2px solid var(--color-warning);color:#fff;padding:6px 10px;border-radius:var(--radius-full);font-size:.72rem;font-weight:800;box-shadow:0 0 16px rgba(255,171,0,.24)}
@@ -897,7 +880,7 @@
 	.game-log-list{max-height:56dvh;overflow-y:auto;display:flex;flex-direction:column;gap:var(--space-xs);margin-bottom:var(--space-sm);-webkit-overflow-scrolling:touch;touch-action:pan-y}
 	.game-log-row{display:grid;grid-template-columns:72px 62px 1fr;gap:var(--space-sm);align-items:center;padding:var(--space-sm) var(--space-md);background:var(--color-surface);border:1px solid var(--color-surface-elevated);border-radius:var(--radius-md);font-size:.72rem}
 	.gl-time{font-family:var(--font-mono);color:var(--color-text-muted)}
-	.gl-type{font-weight:800;color:var(--color-secondary);letter-spacing:.06em}
+	.gl-type{font-weight:800;color:#fff;letter-spacing:.06em}
 	.gl-type.gl-turn{color:var(--color-success)}
 	.gl-detail{font-weight:600;color:var(--color-text)}
 	.gl-detail.gl-gain{color:var(--color-success)}

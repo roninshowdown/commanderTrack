@@ -22,8 +22,8 @@
 	let loading: boolean = $state(true);
 
 	let playerCount: number = $state(4);
-	let selectedPlayers: (string | null)[] = $state([null, null, null, null, null, null]);
-	let selectedDecks: (string | null)[] = $state([null, null, null, null, null, null]);
+	let selectedPlayers: (string | null)[] = $state([null, null, null, null, null]);
+	let selectedDecks: (string | null)[] = $state([null, null, null, null, null]);
 	let maxLife: number = $state(40);
 
 	/* Timer mode */
@@ -64,8 +64,8 @@
 
 	/** Auto-fill player & deck slots with available zone members */
 	function prefillSlots() {
-		const newSelected: (string | null)[] = [null, null, null, null, null, null];
-		const newDecks: (string | null)[] = [null, null, null, null, null, null];
+		const newSelected: (string | null)[] = [null, null, null, null, null];
+		const newDecks: (string | null)[] = [null, null, null, null, null];
 		for (let i = 0; i < playerCount && i < players.length; i++) {
 			const player = players[i];
 			newSelected[i] = player.id;
@@ -117,6 +117,46 @@
 	function getDecksForPlayer(slot: number): Deck[] {
 		const pid = selectedPlayers[slot];
 		return pid ? decks.filter((d) => d.playerId === pid) : [];
+	}
+
+	/* ── Tile picker state ── */
+	let pickerSlot: number | null = $state(null);
+	let pickerKind: 'player' | 'deck' = $state('player');
+
+	function openPlayerPicker(slot: number) {
+		pickerKind = 'player';
+		pickerSlot = slot;
+	}
+	function openDeckPicker(slot: number) {
+		if (!selectedPlayers[slot]) return;
+		pickerKind = 'deck';
+		pickerSlot = slot;
+	}
+	function closePicker() {
+		pickerSlot = null;
+	}
+	function pickPlayer(playerId: string) {
+		if (pickerSlot === null) return;
+		onPlayerSelect(pickerSlot, playerId);
+		closePicker();
+	}
+	function pickDeck(deckId: string) {
+		if (pickerSlot === null) return;
+		selectedDecks[pickerSlot] = deckId;
+		closePicker();
+	}
+	function clearSlot(slot: number) {
+		selectedPlayers[slot] = null;
+		selectedDecks[slot] = null;
+	}
+
+	function getPlayerById(id: string | null): Player | null {
+		if (!id) return null;
+		return players.find((p) => p.id === id) ?? null;
+	}
+	function getDeckById(id: string | null): Deck | null {
+		if (!id) return null;
+		return decks.find((d) => d.id === id) ?? null;
 	}
 
 	function handleAbandon() {
@@ -178,7 +218,7 @@
 		<section class="sec">
 			<h2>Players</h2>
 			<div class="count-row">
-				{#each [2,3,4,5,6] as n}
+				{#each [2,3,4,5] as n}
 					<button class="cnt" class:active={playerCount===n} onclick={()=>playerCount=n}>{n}</button>
 				{/each}
 			</div>
@@ -188,17 +228,42 @@
 		<section class="sec">
 			<h2>Select Players &amp; Decks</h2>
 			<div class="slots">
-				{#each Array(playerCount) as _,i}
-					<div class="slot">
-						<span class="slot-lbl">Slot {i+1}</span>
-						<select value={selectedPlayers[i]??''} onchange={(e)=>onPlayerSelect(i,(e.target as HTMLSelectElement).value)}>
-							<option value="">Select player…</option>
-							{#each getAvailablePlayers(i) as p}<option value={p.id}>{p.name}</option>{/each}
-						</select>
-						<select value={selectedDecks[i]??''} onchange={(e)=>selectedDecks[i]=(e.target as HTMLSelectElement).value} disabled={!selectedPlayers[i]}>
-							<option value="">Select deck…</option>
-							{#each getDecksForPlayer(i) as d}<option value={d.id}>{d.commanderName}</option>{/each}
-						</select>
+				{#each Array(playerCount) as _, i}
+					{@const p = getPlayerById(selectedPlayers[i])}
+					{@const d = getDeckById(selectedDecks[i])}
+					<div class="slot-card">
+						<span class="slot-num">{i + 1}</span>
+						<button type="button" class="slot-pick player-pick" class:filled={!!p} onclick={() => openPlayerPicker(i)}>
+							{#if p}
+								{#if p.imageUrl}
+									<img class="slot-avatar" src={p.imageUrl} alt={p.name} />
+								{:else}
+									<div class="slot-avatar slot-avatar-fallback"><Icon name="user" size={20} /></div>
+								{/if}
+								<span class="slot-name">{p.name}</span>
+							{:else}
+								<div class="slot-avatar slot-avatar-empty"><Icon name="user" size={20} /></div>
+								<span class="slot-name slot-empty-text">Choose player</span>
+							{/if}
+						</button>
+						<button type="button" class="slot-pick deck-pick" class:filled={!!d} disabled={!p} onclick={() => openDeckPicker(i)}>
+							{#if d}
+								{#if d.commanderImageUrl}
+									<img class="slot-cmd-img" src={d.commanderImageUrl} alt={d.commanderName} />
+								{:else}
+									<div class="slot-cmd-img slot-cmd-fallback"><Icon name="deck" size={20} /></div>
+								{/if}
+								<span class="slot-name">{d.commanderName}</span>
+							{:else}
+								<div class="slot-cmd-img slot-cmd-empty"><Icon name="deck" size={20} /></div>
+								<span class="slot-name slot-empty-text">{p ? 'Choose deck' : '—'}</span>
+							{/if}
+						</button>
+						{#if p || d}
+							<button type="button" class="slot-clear" title="Clear slot" onclick={() => clearSlot(i)}>
+								<Icon name="x" size={14} />
+							</button>
+						{/if}
 					</div>
 				{/each}
 			</div>
@@ -284,6 +349,51 @@
 
 {#if toast}<Toast message={toast.message} type={toast.type} onclose={()=>toast=null}/>{/if}
 
+{#if pickerSlot !== null}
+	{@const slot = pickerSlot}
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<div class="picker-overlay" role="presentation" onclick={closePicker}>
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<div class="picker-sheet animate-fade-in" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()}>
+			<div class="picker-header">
+				<h3>{pickerKind === 'player' ? `Select Player · Slot ${slot + 1}` : `Select Deck · Slot ${slot + 1}`}</h3>
+				<button class="picker-close" onclick={closePicker} aria-label="Close">
+					<Icon name="x" size={18} />
+				</button>
+			</div>
+			<div class="picker-grid">
+				{#if pickerKind === 'player'}
+					{#each getAvailablePlayers(slot) as p (p.id)}
+						<button class="picker-item" class:active={selectedPlayers[slot] === p.id} onclick={() => pickPlayer(p.id)}>
+							{#if p.imageUrl}
+								<img class="picker-avatar" src={p.imageUrl} alt={p.name} />
+							{:else}
+								<div class="picker-avatar picker-avatar-fallback"><Icon name="user" size={26} /></div>
+							{/if}
+							<span class="picker-name">{p.name}</span>
+						</button>
+					{:else}
+						<div class="picker-empty">No players available. <a href="/admin/players">Manage players →</a></div>
+					{/each}
+				{:else}
+					{#each getDecksForPlayer(slot) as d (d.id)}
+						<button class="picker-item" class:active={selectedDecks[slot] === d.id} onclick={() => pickDeck(d.id)}>
+							{#if d.commanderImageUrl}
+								<img class="picker-cmd" src={d.commanderImageUrl} alt={d.commanderName} />
+							{:else}
+								<div class="picker-cmd picker-cmd-fallback"><Icon name="deck" size={26} /></div>
+							{/if}
+							<span class="picker-name">{d.commanderName}</span>
+						</button>
+					{:else}
+						<div class="picker-empty">No decks for this player. <a href="/admin/decks">Manage decks →</a></div>
+					{/each}
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}
+
 <style>
 	.setup{padding-top:var(--space-md)}
 	h1{font-size:1.4rem;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:var(--color-primary);margin-bottom:var(--space-xl)}
@@ -293,9 +403,41 @@
 	.cnt{width:48px;height:48px;border-radius:var(--radius-md);background:var(--color-surface);border:1px solid var(--color-surface-elevated);font-size:1.1rem;font-weight:700;transition:all var(--transition-fast)}
 	.cnt.active{background:var(--color-primary);color:white;border-color:var(--color-primary-light);box-shadow:var(--glow-primary)}
 	.slots{display:flex;flex-direction:column;gap:var(--space-md)}
-	.slot{display:flex;gap:var(--space-sm);align-items:center;flex-wrap:wrap}
-	.slot-lbl{width:100%;font-size:.7rem;font-weight:700;color:var(--color-text-muted);letter-spacing:.06em;text-transform:uppercase}
-	.slot select{flex:1;min-width:0;min-height:44px}
+
+	/* Tile-based slot picker */
+	.slot-card{position:relative;display:grid;grid-template-columns:auto 1fr 1fr auto;gap:var(--space-sm);align-items:stretch;padding:var(--space-sm);background:var(--color-surface);border:1px solid var(--color-surface-elevated);border-radius:var(--radius-lg)}
+	.slot-num{display:flex;align-items:center;justify-content:center;width:28px;font-size:.7rem;font-weight:900;color:var(--color-text-muted);letter-spacing:.06em}
+	.slot-pick{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-sm);min-height:64px;border-radius:var(--radius-md);background:var(--color-bg);border:1px solid var(--color-surface-elevated);text-align:left;color:var(--color-text);transition:all var(--transition-fast);overflow:hidden}
+	.slot-pick:hover:not(:disabled){border-color:var(--neon-cyan);box-shadow:var(--glow-cyan)}
+	.slot-pick:disabled{opacity:.5;cursor:not-allowed}
+	.slot-pick.filled{border-color:var(--color-secondary)}
+	.slot-avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--color-surface-elevated)}
+	.slot-avatar-empty,.slot-avatar-fallback,.slot-cmd-empty,.slot-cmd-fallback{display:flex;align-items:center;justify-content:center;color:var(--color-text-muted)}
+	.slot-cmd-img{width:48px;height:36px;border-radius:var(--radius-sm);object-fit:cover;object-position:center top;flex-shrink:0;background:var(--color-surface-elevated)}
+	.slot-name{font-size:.78rem;font-weight:700;color:var(--color-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
+	.slot-empty-text{color:var(--color-text-muted);font-weight:600}
+	.slot-clear{width:28px;height:28px;border-radius:50%;background:transparent;border:1px solid var(--color-surface-elevated);color:var(--color-text-muted);align-self:center;display:flex;align-items:center;justify-content:center;padding:0;min-height:unset}
+	.slot-clear:hover{border-color:var(--color-danger);color:var(--color-danger)}
+	@media(max-width:640px){.slot-card{grid-template-columns:auto 1fr auto;grid-template-rows:auto auto;gap:6px}.slot-num{grid-row:1/3}.player-pick{grid-column:2;grid-row:1}.deck-pick{grid-column:2;grid-row:2}.slot-clear{grid-column:3;grid-row:1/3}}
+
+	/* Picker bottom sheet */
+	.picker-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);display:flex;align-items:flex-end;justify-content:center}
+	.picker-sheet{width:100%;max-width:520px;max-height:80dvh;background:var(--color-surface);border:1px solid var(--color-surface-elevated);border-radius:var(--radius-lg) var(--radius-lg) 0 0;display:flex;flex-direction:column;overflow:hidden}
+	@media(min-width:641px){.picker-overlay{align-items:center}.picker-sheet{border-radius:var(--radius-lg);max-height:75dvh}}
+	.picker-header{display:flex;align-items:center;justify-content:space-between;padding:var(--space-md);border-bottom:1px solid var(--color-surface-elevated)}
+	.picker-header h3{font-size:.9rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--color-secondary)}
+	.picker-close{width:32px;height:32px;min-height:unset;padding:0;border-radius:50%;background:transparent;border:1px solid var(--color-surface-elevated);color:var(--color-text-muted);display:flex;align-items:center;justify-content:center}
+	.picker-close:hover{border-color:var(--color-danger);color:var(--color-danger)}
+	.picker-grid{flex:1;overflow-y:auto;padding:var(--space-md);display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:var(--space-sm)}
+	.picker-item{display:flex;flex-direction:column;align-items:center;gap:6px;padding:var(--space-sm);border-radius:var(--radius-md);background:var(--color-bg);border:1px solid var(--color-surface-elevated);transition:all var(--transition-fast);cursor:pointer}
+	.picker-item:hover{border-color:var(--neon-cyan);box-shadow:var(--glow-cyan);transform:translateY(-1px)}
+	.picker-item.active{border-color:var(--color-primary);box-shadow:var(--glow-primary)}
+	.picker-avatar{width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--color-surface-elevated)}
+	.picker-avatar-fallback,.picker-cmd-fallback{display:flex;align-items:center;justify-content:center;color:var(--color-text-muted)}
+	.picker-cmd{width:96px;height:72px;border-radius:var(--radius-sm);object-fit:cover;object-position:center top;background:var(--color-surface-elevated)}
+	.picker-name{font-size:.72rem;font-weight:700;text-align:center;color:var(--color-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%}
+	.picker-empty{grid-column:1/-1;text-align:center;padding:var(--space-xl);color:var(--color-text-muted);font-size:.8rem}
+	.picker-empty a{color:var(--color-secondary);font-weight:700}
 
 	/* Timer section */
 	.timer-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-md)}
