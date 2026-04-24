@@ -125,50 +125,83 @@
 				img.src = url;
 			});
 			const canvas = document.createElement('canvas');
-			canvas.width = 48;
-			canvas.height = 48;
+			// Larger pattern so each slice actually shows recognisable commander art.
+			const SIZE = 220;
+			canvas.width = SIZE;
+			canvas.height = SIZE;
 			const ctx = canvas.getContext('2d');
 			if (!ctx) return '#4b4b60';
-			ctx.drawImage(image, 0, 0, 48, 48);
-			return ctx.createPattern(canvas, 'repeat') ?? '#4b4b60';
+			// Cover-draw: fill square tile preserving aspect ratio
+			const ir = image.width / image.height;
+			let sw = image.width, sh = image.height, sx = 0, sy = 0;
+			if (ir > 1) { sw = image.height; sx = (image.width - sw) / 2; }
+			else { sh = image.width; sy = (image.height - sh) / 2; }
+			ctx.drawImage(image, sx, sy, sw, sh, 0, 0, SIZE, SIZE);
+			return ctx.createPattern(canvas, 'no-repeat') ?? '#4b4b60';
 		} catch {
 			return '#4b4b60';
 		}
 	}
 
+	/** Per-commander usage, filtered by `excludedDeckIds`. */
+	let excludedDeckIds: string[] = $state([]);
 	let commanderUsageChart = $state<any>(null);
+	let commanderUsageLabels = $state<{ id: string; label: string; image: string; count: number; color: string }[]>([]);
+
 	$effect(() => {
 		void decks;
 		void gameRecords;
+		void excludedDeckIds;
 		(async () => {
-			const usage: Record<string, { label: string; image: string; count: number }> = {};
+			const usage: Record<string, { id: string; label: string; image: string; count: number }> = {};
 			for (const g of gameRecords) {
 				for (const did of g.deckIds) {
+					if (excludedDeckIds.includes(did)) continue;
 					const d = decks.find((x) => x.id === did);
 					if (!d) continue;
-					usage[did] ??= { label: d.commanderName, image: d.commanderImageUrl, count: 0 };
+					usage[did] ??= { id: did, label: d.commanderName, image: d.commanderImageUrl, count: 0 };
 					usage[did].count++;
 				}
 			}
-			const top = Object.values(usage).sort((a, b) => b.count - a.count).slice(0, 8);
+			const top = Object.values(usage).sort((a, b) => b.count - a.count).slice(0, 12);
 			if (!top.length) {
 				commanderUsageChart = null;
+				commanderUsageLabels = [];
 				return;
 			}
+			commanderUsageLabels = top.map((t, i) => ({ ...t, color: CHART_COLORS[i % CHART_COLORS.length] }));
 			if (typeof window === 'undefined') {
 				commanderUsageChart = {
+					ids: top.map((t) => t.id),
 					labels: top.map((t) => t.label),
-					datasets: [{ label: 'Games', data: top.map((t) => t.count), backgroundColor: CHART_COLORS.slice(0, top.length) }]
+					datasets: [{ label: 'Games', data: top.map((t) => t.count), backgroundColor: top.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]) }]
 				};
 				return;
 			}
 			const bg = await Promise.all(top.map((t) => getCommanderPattern(t.image)));
 			commanderUsageChart = {
+				ids: top.map((t) => t.id),
 				labels: top.map((t) => t.label),
-				datasets: [{ label: 'Games', data: top.map((t) => t.count), backgroundColor: bg }]
+				datasets: [{
+					label: 'Games',
+					data: top.map((t) => t.count),
+					backgroundColor: bg,
+					borderColor: '#0a0a12',
+					borderWidth: 2
+				}]
 			};
 		})();
 	});
+
+	function onCommanderPieClick(point: { label: string; value: number }) {
+		const row = commanderUsageLabels.find((r) => r.label === point.label);
+		if (!row) return;
+		excludedDeckIds = [...excludedDeckIds, row.id];
+	}
+
+	function restoreCommanders() {
+		excludedDeckIds = [];
+	}
 
 	function getRecentGames(limit = 8): GameRecord[] {
 		return [...gameRecords].sort((a, b) => b.createdAt - a.createdAt).slice(0, limit);
@@ -398,8 +431,31 @@
 
 		{#if commanderUsageChart}
 			<div class="chart-section">
-				<h3><Icon name="pie-chart" size={16} /> Most Played Commanders</h3>
-				<ChartWrapper type="doughnut" data={commanderUsageChart} height={240} />
+				<h3>
+					<Icon name="pie-chart" size={16} /> Most Played Commanders
+					{#if excludedDeckIds.length}
+						<button class="restore-btn" onclick={restoreCommanders} title="Show all">
+							<Icon name="return" size={12} /> Restore
+						</button>
+					{/if}
+				</h3>
+				<div class="commander-pie">
+					<div class="commander-pie-chart">
+						<ChartWrapper type="pie" data={commanderUsageChart} height={280} onPointClick={onCommanderPieClick}
+							options={{ plugins: { legend: { display: false }, tooltip: { callbacks: {} } } }} />
+					</div>
+					<div class="commander-pie-legend">
+						{#each commanderUsageLabels as row (row.id)}
+							<button class="legend-row" onclick={() => (excludedDeckIds = [...excludedDeckIds, row.id])} title="Click to hide">
+								<span class="legend-swatch" style:background={row.color}></span>
+								{#if row.image}<img class="legend-img" src={row.image} alt="" loading="lazy" />{/if}
+								<span class="legend-name">{row.label}</span>
+								<span class="legend-count">{row.count}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+				<p class="hint">Click a slice or legend entry to hide that commander.</p>
 			</div>
 		{/if}
 
@@ -563,6 +619,20 @@
 	.stat-val { font-size: 1.2rem; font-weight: 800; font-family: var(--font-mono); }
 	.stat-lbl { font-size: .5rem; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; }
 	.chart-section { margin-bottom: var(--space-lg); }
+	.chart-section h3 { display: flex; align-items: center; gap: 8px; }
+	.restore-btn { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 4px 10px; font-size: .7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; background: var(--color-surface); border: 1px solid var(--color-surface-elevated); border-radius: var(--radius-full); color: var(--color-text); cursor: pointer; }
+	.restore-btn:hover { border-color: var(--neon-cyan); color: var(--neon-cyan); }
+	.commander-pie { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr); gap: var(--space-md); align-items: center; }
+	.commander-pie-chart { min-width: 0; }
+	.commander-pie-legend { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+	.legend-row { display: grid; grid-template-columns: 14px 40px 1fr auto; align-items: center; gap: 8px; padding: 6px 10px; background: var(--color-surface); border: 1px solid var(--color-surface-elevated); border-radius: var(--radius-md); text-align: left; cursor: pointer; transition: all var(--transition-fast); }
+	.legend-row:hover { border-color: var(--color-danger); box-shadow: 0 0 10px rgba(255,23,68,.2); }
+	.legend-swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(255,255,255,.3); }
+	.legend-img { width: 40px; height: 30px; border-radius: var(--radius-sm); object-fit: cover; object-position: center top; }
+	.legend-name { font-size: .78rem; font-weight: 700; color: var(--color-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.legend-count { font-size: .82rem; font-weight: 900; color: var(--color-warning); font-variant-numeric: tabular-nums; }
+	.hint { font-size: .68rem; color: var(--color-text-muted); margin-top: 6px; text-align: center; }
+	@media (max-width: 768px) { .commander-pie { grid-template-columns: 1fr; } }
 	.section { margin-bottom: var(--space-lg); }
 	h3 { font-size: .7rem; font-weight: 800; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: .06em; margin-bottom: var(--space-sm); display: flex; align-items: center; gap: 6px; }
 	.game-list { display: flex; flex-direction: column; gap: var(--space-xs); }

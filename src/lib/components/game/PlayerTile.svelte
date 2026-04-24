@@ -13,9 +13,10 @@
 		upsideDown?: boolean;
 		highlightGold?: boolean;
 		showStatusBadges?: boolean;
-		seatPosition?: 'tl' | 'tr' | 'br' | 'bl';
+		seatPosition?: 'tl' | 'tr' | 'br' | 'bl' | 'r';
 		minimalMode?: boolean;
 		selectedToMove?: boolean;
+		rotate?: 'none' | 'left' | 'right';
 		onlifechange: (amount: number) => void; onclick: () => void;
 		onrevive?: () => void;
 	}
@@ -29,6 +30,7 @@
 		seatPosition = 'tl',
 		minimalMode = false,
 		selectedToMove = false,
+		rotate = 'none',
 		onlifechange, onclick, onrevive
 	}: Props = $props();
 
@@ -74,6 +76,7 @@
 <div class="tile" class:active={isActive && !commanderDamageMode} class:reactive={isReactive && !commanderDamageMode} class:ticking={isTimerTicking} class:pulsing={isPulsing}
 	class:dead={isDead} class:cmd-mode={commanderDamageMode} class:cmd-source={commanderDamageSource} class:upside-down={upsideDown} class:gold-highlight={highlightGold}
 	class:seat-tl={seatPosition === 'tl'} class:seat-tr={seatPosition === 'tr'} class:seat-br={seatPosition === 'br'} class:seat-bl={seatPosition === 'bl'}
+	class:rotate-left={rotate === 'left'} class:rotate-right={rotate === 'right'}
 	class:minimal={minimalMode} class:move-candidate={selectedToMove}
 	role="button" tabindex="0"
 	onpointerup={(e) => { e.stopPropagation(); onclick(); }}
@@ -137,6 +140,10 @@
 	.tile.cmd-mode{cursor:crosshair}
 	.tile.cmd-source{border-color:rgba(255,171,0,.86);box-shadow:0 0 22px rgba(255,171,0,.4)}
 	.tile.upside-down .content{transform:rotate(180deg)}
+	/* Rotate entire tile content for right- or left-seated players so numbers face them */
+	.tile.rotate-left .content{transform:rotate(-90deg)}
+	.tile.rotate-right .content{transform:rotate(90deg)}
+	.tile.rotate-left .bg,.tile.rotate-right .bg{transform:scale(1.04)}
 	.bg{position:absolute;inset:0;background-size:cover;background-position:center top;opacity:.9;z-index:0;transform:scale(1.04);filter:saturate(1.15) contrast(1.06)}
 	.tile::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.34) 46%,rgba(0,0,0,.62));z-index:0}
 	.tile.dead .bg{opacity:.6;filter:brightness(.35) saturate(.7) contrast(1.2)}

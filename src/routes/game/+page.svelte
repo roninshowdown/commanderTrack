@@ -153,18 +153,20 @@
 	let wakeLockSentinel: { release: () => Promise<void> } | null = null;
 
 	/* ── Layouts per player count ──
-	 * Each entry maps slot-index -> { gridArea, seat, upsideDown, cmdAngle }
+	 * Each entry maps slot-index -> { gridArea, seat, upsideDown, cmdAngle, rotate }
+	 * Order of entries = turn-advance order (clockwise).
 	 */
-	type SeatLayout = { gridArea: string; seat: 'tl' | 'tr' | 'br' | 'bl'; upsideDown: boolean; cmdAngle: number };
+	type SeatLayout = { gridArea: string; seat: 'tl' | 'tr' | 'br' | 'bl' | 'r'; upsideDown: boolean; cmdAngle: number; rotate?: 'none' | 'left' | 'right' };
 	const LAYOUTS: Record<number, SeatLayout[]> = {
 		2: [
 			{ gridArea: '1 / 1 / 2 / 2', seat: 'tl', upsideDown: true, cmdAngle: 90 },
 			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 270 }
 		],
+		// 3p clockwise: P1 (top-wide) → P2 (bottom-left) → P3 (bottom-right, rotated to face right seat)
 		3: [
 			{ gridArea: '1 / 1 / 2 / 3', seat: 'tl', upsideDown: true, cmdAngle: 90 },
-			{ gridArea: '2 / 2 / 3 / 3', seat: 'br', upsideDown: false, cmdAngle: 315 },
-			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 }
+			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 },
+			{ gridArea: '2 / 2 / 3 / 3', seat: 'br', upsideDown: false, cmdAngle: 315, rotate: 'left' }
 		],
 		4: [
 			{ gridArea: '1 / 1 / 2 / 2', seat: 'tl', upsideDown: true, cmdAngle: 135 },
@@ -172,12 +174,13 @@
 			{ gridArea: '2 / 2 / 3 / 3', seat: 'br', upsideDown: false, cmdAngle: 315 },
 			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 }
 		],
+		// 5p clockwise: P1 TL → P2 TR → P3 right-vertical (rotated) → P4 BR → P5 BL
 		5: [
 			{ gridArea: '1 / 1 / 2 / 2', seat: 'tl', upsideDown: true, cmdAngle: 135 },
 			{ gridArea: '1 / 2 / 2 / 3', seat: 'tr', upsideDown: true, cmdAngle: 90 },
+			{ gridArea: '1 / 3 / 3 / 4', seat: 'r', upsideDown: false, cmdAngle: 0, rotate: 'left' },
 			{ gridArea: '2 / 2 / 3 / 3', seat: 'br', upsideDown: false, cmdAngle: 315 },
-			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 },
-			{ gridArea: '1 / 3 / 3 / 4', seat: 'tr', upsideDown: false, cmdAngle: 0 }
+			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 }
 		]
 	};
 
@@ -186,8 +189,12 @@
 		return LAYOUTS[n] ?? LAYOUTS[4];
 	}
 
-	function seatPositionForIndex(idx: number): 'tl' | 'tr' | 'br' | 'bl' {
+	function seatPositionForIndex(idx: number): 'tl' | 'tr' | 'br' | 'bl' | 'r' {
 		return getLayout()[idx]?.seat ?? 'tl';
+	}
+
+	function rotationForIndex(idx: number): 'none' | 'left' | 'right' {
+		return getLayout()[idx]?.rotate ?? 'none';
 	}
 
 
@@ -486,7 +493,65 @@
 		showWinnerModal = false;
 		finishGame(id);
 	}
+
+	/* ── Placements picker state (post-game ranking) ── */
+	let placementPicks: Record<string, number> = $state({});
+
+	/** Suggest places 1..N: winner (if picked) / last alive first, then later-eliminated = better place, ties by life. */
+	function suggestPlacements(): { playerId: string; place: number }[] {
+		if (!$gameState) return [];
+		const players = $gameState.players;
+		const N = players.length;
+		const elim = $gameState.eliminationOrder ?? [];
+		const alive = players.filter((p: GamePlayerState) => !p.isDead);
+		const dead = players.filter((p: GamePlayerState) => p.isDead);
+
+		// Dead players in order of elimination (earliest = worst place). Reverse so later = better.
+		const deadSorted = [...dead].sort((a: GamePlayerState, b: GamePlayerState) => {
+			const ai = elim.indexOf(a.playerId);
+			const bi = elim.indexOf(b.playerId);
+			if (ai !== bi) return bi - ai; // later eliminated = better (smaller place number)
+			return b.life - a.life;
+		});
+		// Alive sorted by remaining life desc
+		const aliveSorted = [...alive].sort((a: GamePlayerState, b: GamePlayerState) => b.life - a.life);
+		const ordered = [...aliveSorted, ...deadSorted]; // best → worst
+		return ordered.slice(0, N).map((p: GamePlayerState, i: number) => ({ playerId: p.playerId, place: i + 1 }));
+	}
+
+	function resetPlacementSuggestions() {
+		const suggested = suggestPlacements();
+		const next: Record<string, number> = {};
+		for (const sp of suggested) next[sp.playerId] = sp.place;
+		placementPicks = next;
+	}
+
+	/** Count duplicates for UI warnings. */
+	let placementDupes = $derived.by(() => {
+		const counts: Record<number, number> = {};
+		for (const v of Object.values(placementPicks)) counts[v] = (counts[v] ?? 0) + 1;
+		return counts;
+	});
+	let placementValid = $derived.by(() => {
+		if (!$gameState) return false;
+		const N = $gameState.players.length;
+		const picked = Object.values(placementPicks);
+		if (picked.length !== N) return false;
+		const set = new Set(picked);
+		if (set.size !== N) return false;
+		for (let i = 1; i <= N; i++) if (!set.has(i)) return false;
+		return true;
+	});
+
+	function confirmPlacements() {
+		if (!$gameState || !placementValid) return;
+		const placements = Object.entries(placementPicks).map(([playerId, place]) => ({ playerId, place }));
+		const winner = placements.find((p) => p.place === 1);
+		showWinnerModal = false;
+		finishGame(winner?.playerId ?? '', placements);
+	}
 	function openWinnerModal() {
+		resetPlacementSuggestions();
 		showWinnerModal = true;
 		if (showWheel && autoPaused) {
 			winnerModalPausedByUi = true;
@@ -598,6 +663,20 @@
 		revivePlayer(playerIndex);
 		clearRevivePrompt();
 	}
+
+	/* ── Auto-finish: when ≤1 player alive, open placements modal once ── */
+	let autoFinishTriggered: boolean = $state(false);
+	$effect(() => {
+		const gs = $gameState;
+		if (!gs || gs.isFinished) return;
+		if (startPhase !== 'playing') return;
+		if (gs.players.length < 2) return;
+		const aliveCount = gs.players.filter((p: GamePlayerState) => !p.isDead).length;
+		if (aliveCount <= 1 && !autoFinishTriggered && !showWinnerModal) {
+			autoFinishTriggered = true;
+			openWinnerModal();
+		}
+	});
 </script>
 
 <div class="game-page">
@@ -653,6 +732,7 @@
 							minimalMode={startPhase !== 'playing'}
 							selectedToMove={moveCandidateIndex === i && isIdle}
 							seatPosition={seatPositionForIndex(i)}
+							rotate={rotationForIndex(i)}
 							highlightGold={(moveCandidateIndex === i && isIdle) || (randomPickActive && randomPickIdx === i) || (startPhase === 'roulette' && rouletteIdx === i)}
 							onlifechange={(amt: number)=>handleLifeChange(i,amt)}
 							onrevive={() => requestRevive(i)}
@@ -690,7 +770,11 @@
 							onpointerleave={wheelPointerLeave}>
 							{#if longPressing}
 								<svg class="lp-ring" class:lp-ring-blue={hasReactivePlayer && !$commanderDamageMode} viewBox="0 0 100 100">
-									<circle cx="50" cy="50" r="46" />
+									{#if playerCount === 3 || playerCount === 5}
+										<rect x="4" y="4" width="92" height="92" rx="26" ry="26" />
+									{:else}
+										<circle cx="50" cy="50" r="46" />
+									{/if}
 								</svg>
 							{/if}
 							{#if $commanderDamageMode && cmdSourceImg}
@@ -760,17 +844,39 @@
 			<div class="no-game"><p>Unsupported player count: {playerCount}.</p><Button variant="primary" onclick={() => goto('/setup')}>{#snippet children()}<Icon name="play" size={16}/> Setup a Game{/snippet}</Button></div>
 		{/if}
 
-		<Modal bind:open={showWinnerModal} title="Select Winner">
+		<Modal bind:open={showWinnerModal} title="Game Placements">
 			{#snippet children()}
-				<div class="winner-list">
-					{#each $gameState.players.filter((p: GamePlayerState) => !p.isDead) as p}
-						<button class="winner-opt" onclick={()=>selectWinner(p.playerId)}>
-							{#if p.commanderImageUrl}<img src={p.commanderImageUrl} alt="" class="winner-img"/>{/if}
-							<div><strong>{p.playerName}</strong><span>{p.commanderName}</span></div>
-						</button>
-					{/each}
+				<div class="placements">
+					<p class="placements-hint">Assign a final place to each player (1 = winner). Duplicates are highlighted.</p>
+					<div class="placements-list">
+						{#each $gameState.players as p}
+							{@const place = placementPicks[p.playerId] ?? 0}
+							{@const dupe = place > 0 && (placementDupes[place] ?? 0) > 1}
+							<div class="placement-row" class:placement-dupe={dupe}>
+								{#if p.commanderImageUrl}<img src={p.commanderImageUrl} alt="" class="placement-img" />{/if}
+								<div class="placement-info">
+									<strong>{p.playerName}</strong>
+									<span>{p.commanderName}{p.isDead ? ' · dead' : ''}</span>
+								</div>
+								<select class="placement-select" bind:value={placementPicks[p.playerId]}>
+									<option value={0} disabled>—</option>
+									{#each Array($gameState.players.length) as _, i}
+										<option value={i + 1}>{i + 1}{i === 0 ? ' (Winner)' : ''}</option>
+									{/each}
+								</select>
+							</div>
+						{/each}
+					</div>
+					<div class="placements-actions">
+						<Button variant="ghost" size="sm" onclick={resetPlacementSuggestions}>
+							{#snippet children()}<Icon name="return" size={14}/> Reset Suggestion{/snippet}
+						</Button>
+						<Button variant="primary" size="md" onclick={confirmPlacements} disabled={!placementValid}>
+							{#snippet children()}<Icon name="trophy" size={14}/> Confirm & Finish{/snippet}
+						</Button>
+					</div>
 					<Button variant="ghost" size="sm" onclick={closeWinnerModal}>
-						{#snippet children()}<Icon name="return" size={14}/> Return{/snippet}
+						{#snippet children()}<Icon name="x" size={14}/> Cancel{/snippet}
 					</Button>
 				</div>
 			{/snippet}
@@ -785,8 +891,8 @@
 						{#each gameLogRows as row (row.id)}
 							<div class="game-log-row">
 								<span class="gl-time">{formatTimestamp(row.timestamp)}</span>
-								<span class="gl-type" class:gl-turn={row.tone === 'turn'}>{row.label}</span>
-								<span class="gl-detail" class:gl-gain={row.tone === 'gain'} class:gl-loss={row.tone === 'loss'}>{row.detail}</span>
+								<span class="gl-type" class:gl-turn={row.tone === 'turn'} class:gl-react={row.tone === 'react'}>{row.label}</span>
+								<span class="gl-detail" class:gl-gain={row.tone === 'gain'} class:gl-loss={row.tone === 'loss'} class:gl-react-detail={row.tone === 'react'}>{row.detail}</span>
 							</div>
 						{/each}
 					{/if}
@@ -813,10 +919,13 @@
 	.battlefield.bf-2{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
 	.battlefield.bf-3{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
 	.battlefield.bf-4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
-	.battlefield.bf-5{grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr}
+	.battlefield.bf-5{grid-template-columns:1fr 1fr 0.72fr;grid-template-rows:1fr 1fr}
 	/* Smaller wheel for sparser layouts so life/buttons stay visible */
 	.battlefield.bf-2 .wheel-core,
 	.battlefield.bf-3 .wheel-core{width:160px;height:160px;border-width:6px}
+	/* Square rounded-rect wheel for 3p & 5p (preserves readability of player life numbers) */
+	.battlefield.bf-3 .wheel-core,
+	.battlefield.bf-5 .wheel-core{width:220px;height:220px;border-radius:28px;border-width:6px;clip-path:none}
 	.battlefield.bf-2 .wheel-time,
 	.battlefield.bf-3 .wheel-time{font-size:2.7rem}
 	.battlefield.bf-2 .wheel-btn,
@@ -839,8 +948,10 @@
 	/* long-press loading ring */
 	.lp-ring{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;transform:rotate(-90deg)}
 	.lp-ring circle{fill:none;stroke:rgba(0,230,118,.6);stroke-width:5;stroke-linecap:round;stroke-dasharray:289;stroke-dashoffset:289;animation:lp-fill .25s linear forwards}
-	.lp-ring.lp-ring-blue circle{stroke:rgba(0,229,255,.75)}
+	.lp-ring rect{fill:none;stroke:rgba(0,230,118,.6);stroke-width:5;stroke-linecap:round;stroke-dasharray:332;stroke-dashoffset:332;animation:lp-fill-rect .25s linear forwards}
+	.lp-ring.lp-ring-blue circle,.lp-ring.lp-ring-blue rect{stroke:rgba(0,229,255,.75)}
 	@keyframes lp-fill{to{stroke-dashoffset:0}}
+	@keyframes lp-fill-rect{to{stroke-dashoffset:0}}
 	@keyframes pulse-border-blue{0%,100%{border-color:rgba(255,23,68,.95);box-shadow:0 0 24px rgba(255,23,68,.38)}50%{border-color:rgba(255,23,68,.65);box-shadow:0 0 12px rgba(255,23,68,.22)}}
 	/* ── Start button ── */
 	.wheel-start{border-color:rgba(0,230,118,.6);box-shadow:0 0 20px rgba(0,230,118,.3);cursor:pointer}
@@ -884,14 +995,26 @@
 	.winner-opt:hover{border-color:var(--neon-cyan);box-shadow:var(--glow-cyan)}
 	.winner-img{width:40px;height:30px;border-radius:var(--radius-sm);object-fit:cover}
 	.winner-opt strong{font-size:.85rem;display:block}.winner-opt span{font-size:.7rem;color:var(--color-text-muted)}
+	.placements{display:flex;flex-direction:column;gap:var(--space-sm)}
+	.placements-hint{font-size:.78rem;color:var(--color-text-muted);margin:0}
+	.placements-list{display:flex;flex-direction:column;gap:var(--space-xs)}
+	.placement-row{display:grid;grid-template-columns:auto 1fr auto;gap:var(--space-sm);align-items:center;padding:var(--space-sm) var(--space-md);border-radius:var(--radius-md);background:var(--color-surface);border:1px solid var(--color-surface-elevated)}
+	.placement-row.placement-dupe{border-color:var(--color-danger);box-shadow:0 0 12px rgba(255,23,68,.3)}
+	.placement-img{width:44px;height:32px;border-radius:var(--radius-sm);object-fit:cover;object-position:center top}
+	.placement-info strong{font-size:.85rem;display:block;color:var(--color-text)}
+	.placement-info span{font-size:.7rem;color:var(--color-text-muted)}
+	.placement-select{min-height:36px;padding:4px 10px;font-size:.9rem;font-weight:800;background:var(--color-surface-elevated);color:var(--color-text);border:1px solid var(--color-surface-elevated);border-radius:var(--radius-md);font-family:var(--font-mono)}
+	.placements-actions{display:flex;gap:var(--space-sm);justify-content:space-between;align-items:center;padding-top:var(--space-xs)}
 	.game-log-list{max-height:56dvh;overflow-y:auto;display:flex;flex-direction:column;gap:var(--space-xs);margin-bottom:var(--space-sm);-webkit-overflow-scrolling:touch;touch-action:pan-y}
 	.game-log-row{display:grid;grid-template-columns:72px 62px 1fr;gap:var(--space-sm);align-items:center;padding:var(--space-sm) var(--space-md);background:var(--color-surface);border:1px solid var(--color-surface-elevated);border-radius:var(--radius-md);font-size:.72rem}
 	.gl-time{font-family:var(--font-mono);color:var(--color-text-muted)}
 	.gl-type{font-weight:800;color:#fff;letter-spacing:.06em}
 	.gl-type.gl-turn{color:var(--color-success)}
+	.gl-type.gl-react{color:var(--neon-cyan,#00e5ff)}
 	.gl-detail{font-weight:600;color:var(--color-text)}
 	.gl-detail.gl-gain{color:var(--color-success)}
 	.gl-detail.gl-loss{color:var(--color-danger)}
+	.gl-detail.gl-react-detail{color:var(--neon-cyan,#00e5ff)}
 
 	@media (max-width: 768px) {
 		.game-page { padding: 0; gap: 2px; flex: 1; overflow: hidden; }
@@ -899,6 +1022,8 @@
 		.wheel-core { width: 172px; height: 172px; }
 		.battlefield.bf-2 .wheel-core,
 		.battlefield.bf-3 .wheel-core { width: 134px; height: 134px; }
+		.battlefield.bf-3 .wheel-core,
+		.battlefield.bf-5 .wheel-core { width: 170px; height: 170px; border-radius: 24px; }
 		.battlefield.bf-2 .wheel-time,
 		.battlefield.bf-3 .wheel-time { font-size: 2.05rem; }
 		.battlefield.bf-2 .wheel-btn,

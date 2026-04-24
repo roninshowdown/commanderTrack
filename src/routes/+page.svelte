@@ -31,7 +31,7 @@
 
 <div class="home">
 	<div class="hero animate-fade-in">
-		<div class="logo-ring"><img src="/Commander_track_icon.png" alt="Commander Track" class="app-icon" /></div>
+		<div class="logo-ring"><img src="/icon-512.png" alt="Commander Track" class="app-icon" /></div>
 		<h1 class="title">COMMANDER<br /><span class="accent">TRACK</span></h1>
 	</div>
 

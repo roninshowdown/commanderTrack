@@ -35,7 +35,7 @@
 				plugins: {
 					legend: { labels: { color: '#7a7a96', font: { size: 11 } } }
 				},
-				scales: type === 'doughnut' ? {} : {
+				scales: (type === 'doughnut' || type === 'pie') ? {} : {
 					x: { ticks: { color: '#4a4a64', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
 					y: { ticks: { color: '#4a4a64', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
 				},

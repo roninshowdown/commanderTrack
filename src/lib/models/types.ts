@@ -153,6 +153,12 @@ export interface RankEntry {
 	winRate: number;
 }
 
+/** Final placement for a single player after a game (1 = winner, N = last). */
+export interface GamePlacement {
+	playerId: string;
+	place: number;
+}
+
 /** Game record persisted after a game ends */
 export interface GameRecord {
 	id: string;
@@ -164,6 +170,8 @@ export interface GameRecord {
 	secondPlaceId?: string | null;
 	thirdPlaceId?: string | null;
 	eliminationOrder?: string[];
+	/** Full per-player placements (1..N). Present on games finished with the placements flow. */
+	placements?: GamePlacement[];
 	createdAt: number;
 	finishedAt: number | null;
 	zoneId: string;

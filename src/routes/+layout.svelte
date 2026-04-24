@@ -110,7 +110,7 @@
 		<div class="login-shell">
 			<div class="login-card animate-fade-in">
 				<div class="login-hero">
-					<div class="logo-ring"><img src="/Commander_track_icon.png" alt="Commander Track" class="login-logo" /></div>
+					<div class="logo-ring"><img src="/icon-512.png" alt="Commander Track" class="login-logo" /></div>
 					<h1>Commander Track</h1>
 					<p class="login-sub">Please sign in to continue</p>
 				</div>

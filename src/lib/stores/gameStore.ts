@@ -434,9 +434,10 @@ export function revivePlayer(playerIndex: number): void {
 
 /* ── Finish / Reset ── */
 
-export function finishGame(winnerId: string): void {
+export function finishGame(winnerId: string, placements?: { playerId: string; place: number }[]): void {
 	stopTimer();
 	cancelPersist();
+	flushPendingLog();
 	const zoneId = get(_activeZoneId) ?? '';
 	_gameState.update((state) => {
 		if (!state) return state;
@@ -455,6 +456,7 @@ export function finishGame(winnerId: string): void {
 				secondPlaceId: podium[1] ?? null,
 				thirdPlaceId: podium[2] ?? null,
 				eliminationOrder: [...(state.eliminationOrder ?? [])],
+				...(placements ? { placements } : {}),
 				createdAt: state.config.createdAt,
 				finishedAt: Date.now(),
 				zoneId,
@@ -469,6 +471,7 @@ export function finishGame(winnerId: string): void {
 export function abandonGame(): void {
 	stopTimer();
 	cancelPersist();
+	flushPendingLog();
 	_gameState.set(null);
 	_logEntries.set([]);
 	_undoStack.set([]);
@@ -480,6 +483,7 @@ export function abandonGame(): void {
 export function resetGame(): void {
 	stopTimer();
 	cancelPersist();
+	flushPendingLog();
 	_gameState.set(null);
 	_logEntries.set([]);
 	_undoStack.set([]);
@@ -568,14 +572,56 @@ function addLog(
 	value: number, type: 'life' | 'commander_damage', sourcePlayerId?: string
 ): void {
 	const zoneId = get(_activeZoneId) ?? undefined;
-	const entry: LogEntry = { id: uid(), gameId, playerId, playerName, value, type, sourcePlayerId, timestamp: Date.now(), zoneId };
+	const now = Date.now();
+
+	// ── Event stacking: merge same-player, same-type, same-direction, same-source within 1000ms
+	const pending = _pendingLog;
+	const canMerge =
+		pending &&
+		pending.entry.gameId === gameId &&
+		pending.entry.playerId === playerId &&
+		pending.entry.type === type &&
+		(pending.entry.sourcePlayerId ?? undefined) === (sourcePlayerId ?? undefined) &&
+		Math.sign(pending.entry.value) === Math.sign(value) &&
+		now - pending.entry.timestamp < 1000;
+
+	if (canMerge && pending) {
+		clearTimeout(pending.timer);
+		pending.entry.value += value;
+		pending.entry.timestamp = now;
+		// Reflect merged value in the in-memory log array (ref equality preserved)
+		_logEntries.update((e) => [...e]);
+		pending.timer = setTimeout(() => flushPendingLog(), 1000);
+		schedulePersist();
+		return;
+	}
+
+	// Flush prior pending (different target) before starting a new one
+	if (pending) flushPendingLog();
+
+	const entry: LogEntry = { id: uid(), gameId, playerId, playerName, value, type, sourcePlayerId, timestamp: now, zoneId };
 	_logEntries.update((e) => [entry, ...e]);
+	const timer = setTimeout(() => flushPendingLog(), 1000);
+	_pendingLog = { entry, zoneId, timer };
+	schedulePersist();
+}
+
+/** Mutable merge buffer for log-entry stacking. */
+let _pendingLog: { entry: LogEntry; zoneId: string | undefined; timer: ReturnType<typeof setTimeout> } | null = null;
+
+function flushPendingLog(): void {
+	const pending = _pendingLog;
+	if (!pending) return;
+	clearTimeout(pending.timer);
+	_pendingLog = null;
+	const { entry, zoneId } = pending;
 	try {
 		getDataServiceSync().addLogEntry({
-			gameId, playerId, playerName, value, type, sourcePlayerId, timestamp: entry.timestamp, zoneId
+			gameId: entry.gameId, playerId: entry.playerId, playerName: entry.playerName,
+			value: entry.value, type: entry.type, sourcePlayerId: entry.sourcePlayerId,
+			timestamp: entry.timestamp, zoneId
 		});
 	} catch (e) { logger.warn('gameStore.addLog', 'Failed to persist log entry', e); }
-	schedulePersist();
 }
 
 function addAnalyticsEventV2(
