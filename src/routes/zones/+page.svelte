@@ -38,9 +38,23 @@
 
 	/* Expand/collapse members */
 	let expandedZoneId: string | null = $state(null);
+	let revealedPasswordZoneId: string | null = $state(null);
 
 	function toggleExpand(zoneId: string) {
-		expandedZoneId = expandedZoneId === zoneId ? null : zoneId;
+		if (expandedZoneId === zoneId) {
+			expandedZoneId = null;
+			if (revealedPasswordZoneId === zoneId) revealedPasswordZoneId = null;
+			return;
+		}
+		expandedZoneId = zoneId;
+		if (revealedPasswordZoneId && revealedPasswordZoneId !== zoneId) {
+			revealedPasswordZoneId = null;
+		}
+	}
+
+	function togglePassword(zoneId: string) {
+		if (expandedZoneId !== zoneId) return;
+		revealedPasswordZoneId = revealedPasswordZoneId === zoneId ? null : zoneId;
 	}
 
 	async function handleRemoveMember(zoneId: string, targetUid: string, displayName: string) {
@@ -193,15 +207,29 @@
 						</div>
 						{#if expandedZoneId === z.id}
 							<div class="member-list">
+								{#if z.creatorId === uid}
+									<div class="zone-admin-row">
+										{#if z.password}
+											<Button variant="ghost" size="sm" onclick={() => togglePassword(z.id)}>
+												{#snippet children()}<Icon name={revealedPasswordZoneId === z.id ? 'chevron-up' : 'chevron-down'} size={12} /> {revealedPasswordZoneId === z.id ? 'Hide Zone Password' : 'Show Zone Password'}{/snippet}
+											</Button>
+										{/if}
+										{#if z.password && revealedPasswordZoneId === z.id}
+											<span class="zone-password">Password: {z.password}</span>
+										{/if}
+									</div>
+								{/if}
 								{#each Object.entries(z.members) as [memberUid, info]}
 									<div class="member-row">
 										<span class="member-name">{info.displayName}</span>
 										<span class="member-role">{info.role}</span>
-										{#if z.creatorId === uid && memberUid !== z.creatorId}
-											<button class="member-remove" onclick={() => handleRemoveMember(z.id, memberUid, info.displayName)}>
-												<Icon name="trash" size={12} color="var(--color-danger)" />
-											</button>
-										{/if}
+										<div class="member-action">
+											{#if z.creatorId === uid && memberUid !== z.creatorId}
+												<button class="member-remove" onclick={() => handleRemoveMember(z.id, memberUid, info.displayName)}>
+													<Icon name="trash" size={12} color="var(--color-danger)" />
+												</button>
+											{/if}
+										</div>
 									</div>
 								{/each}
 							</div>
@@ -224,7 +252,7 @@
 						</div>
 						{#if joiningZoneId === z.id}
 							<div class="join-form">
-								<input type="text" bind:value={joinDisplayName} placeholder="Your display name" required />
+								<input type="text" bind:value={joinDisplayName} placeholder="Join with name" required />
 								{#if z.password}
 									<input type="password" bind:value={joinPassword} placeholder="Zone password" />
 								{/if}
@@ -251,7 +279,7 @@
 			<div class="field"><label for="cz-pw">Password <span class="opt">(optional)</span></label>
 				<input id="cz-pw" type="text" bind:value={newZonePassword} placeholder="Room code" />
 			</div>
-			<div class="field"><label for="cz-dn">Your Display Name <span class="req">*</span></label>
+			<div class="field"><label for="cz-dn">Join with Name <span class="req">*</span></label>
 				<input id="cz-dn" type="text" bind:value={newDisplayName} placeholder="Your name in this zone" required />
 			</div>
 			<Button variant="primary" fullWidth onclick={handleCreate} disabled={creating || !newZoneName.trim() || !newDisplayName.trim()}>
@@ -282,10 +310,13 @@
 	.expand-btn { width: 32px; height: 32px; min-height: unset; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); background: var(--color-surface-elevated); transition: all var(--transition-fast); }
 	.expand-btn:hover { background: var(--color-surface-hover); }
 	.member-list { width: 100%; display: flex; flex-direction: column; gap: 2px; margin-top: var(--space-xs); padding-top: var(--space-sm); border-top: 1px solid var(--color-surface-elevated); animation: fade-in 0.2s ease; }
+	.zone-admin-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-sm); padding: 0 var(--space-sm) var(--space-xs) var(--space-sm); }
+	.zone-password { font-size: .66rem; color: var(--color-warning); font-weight: 700; letter-spacing: .02em; background: rgba(255, 171, 0, .08); border: 1px solid rgba(255, 171, 0, .28); border-radius: var(--radius-full); padding: 3px 10px; }
 	.member-row { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); }
 	.member-row:hover { background: var(--color-surface-hover); }
 	.member-name { flex: 1; font-size: .75rem; font-weight: 600; }
 	.member-role { font-size: .6rem; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+	.member-action { width: 28px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 	.member-remove { width: 28px; height: 28px; min-height: unset; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-full); transition: all var(--transition-fast); }
 	.member-remove:hover { background: rgba(255, 23, 68, .15); }
 	.join-form { width: 100%; display: flex; flex-direction: column; gap: var(--space-sm); margin-top: var(--space-sm); }

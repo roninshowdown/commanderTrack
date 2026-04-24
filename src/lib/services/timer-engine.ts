@@ -2,7 +2,7 @@
    Timer Engine — Pure logic, no UI deps
    ============================================ */
 
-import type { GameState, TimerConfigB, GamePlayerState } from '$lib/models/types';
+import type { GameState, TimerConfigA, TimerConfigB, GamePlayerState } from '$lib/models/types';
 
 /* ── Scaling helpers ── */
 
@@ -20,21 +20,30 @@ export function tick(state: GameState): GameState {
 	if (!state.isRunning || state.isFinished) return state;
 	const next = structuredClone(state);
 	const cfg = next.config.timerConfig;
+	if (cfg.variant === 'none') return next; // no countdown
 	const active = next.players[next.activePlayerIndex];
-	const reactive = next.reactivePlayerIndex !== null ? next.players[next.reactivePlayerIndex] : null;
+	const currentReactiveIdx = next.reactivePlayerIndices.length > 0
+		? next.reactivePlayerIndices[next.reactivePlayerIndices.length - 1]
+		: null;
+	const reactive = currentReactiveIdx !== null ? next.players[currentReactiveIdx] : null;
 
-	if (cfg.variant === 'A') tickA(next, active);
-	else tickB(next, cfg, active, reactive);
+	if (cfg.variant === 'A') tickA(next, cfg as TimerConfigA, active);
+	else tickB(next, cfg as TimerConfigB, active, reactive);
 
 	return next;
 }
 
-function tickA(s: GameState, active: GamePlayerState): void {
+function tickA(s: GameState, cfg: TimerConfigA, active: GamePlayerState): void {
 	if (s.timerInfo.phase === 'SHARED_START') {
 		if (s.sharedStartTimeRemaining > 0) s.sharedStartTimeRemaining--;
 		if (s.sharedStartTimeRemaining <= 0) {
 			s.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: s.activePlayerIndex };
 		}
+	} else if (s.reactivePlayerIndices.length > 0) {
+		const currentIdx = s.reactivePlayerIndices[s.reactivePlayerIndices.length - 1];
+		const reactive = s.players[currentIdx];
+		if (reactive.poolTimeRemaining > 0) reactive.poolTimeRemaining--;
+		s.timerInfo = { phase: 'POOL_TIME', targetPlayerIndex: currentIdx };
 	} else {
 		if (active.poolTimeRemaining > 0) active.poolTimeRemaining--;
 		s.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: s.activePlayerIndex };
@@ -43,10 +52,13 @@ function tickA(s: GameState, active: GamePlayerState): void {
 
 function tickB(s: GameState, cfg: TimerConfigB, active: GamePlayerState, reactive: GamePlayerState | null): void {
 	const phase = s.timerInfo.phase;
+	const currentReactiveIdx = s.reactivePlayerIndices.length > 0
+		? s.reactivePlayerIndices[s.reactivePlayerIndices.length - 1]
+		: null;
 	if (phase === 'REACTION_TIME' && reactive) {
 		if (reactive.reactionTimeRemaining > 0) reactive.reactionTimeRemaining--;
 		if (reactive.reactionTimeRemaining <= 0) {
-			s.timerInfo = { phase: 'POOL_TIME', targetPlayerIndex: s.reactivePlayerIndex! };
+			s.timerInfo = { phase: 'POOL_TIME', targetPlayerIndex: currentReactiveIdx! };
 		}
 	} else if (phase === 'POOL_TIME') {
 		const t = s.players[s.timerInfo.targetPlayerIndex];
@@ -65,11 +77,14 @@ function tickB(s: GameState, cfg: TimerConfigB, active: GamePlayerState, reactiv
 export function startGame(state: GameState): GameState {
 	const next = structuredClone(state);
 	next.isRunning = true;
-	if (next.config.timerConfig.variant === 'A') {
+	const cfg = next.config.timerConfig;
+	if (cfg.variant === 'none') {
+		next.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: next.activePlayerIndex };
+	} else if (cfg.variant === 'A') {
 		next.timerInfo = { phase: 'SHARED_START', targetPlayerIndex: next.activePlayerIndex };
 	} else {
-		const cfg = next.config.timerConfig as TimerConfigB;
-		next.players[next.activePlayerIndex].playerTimeRemaining = getScaledPlayerTime(cfg, 1);
+		const cfgB = cfg as TimerConfigB;
+		next.players[next.activePlayerIndex].playerTimeRemaining = getScaledPlayerTime(cfgB, 1);
 		next.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: next.activePlayerIndex };
 	}
 	return next;
@@ -82,20 +97,80 @@ export function togglePause(state: GameState): GameState {
 }
 
 export function passToReactivePlayer(state: GameState, idx: number): GameState {
-	if (state.config.timerConfig.variant === 'A') return state;
+	const cfg = state.config.timerConfig;
+	if (cfg.variant === 'none') return state;
+	if (cfg.variant === 'A') {
+		const next = structuredClone(state);
+		next.reactivePlayerIndices = [...next.reactivePlayerIndices.filter(i => i !== idx), idx];
+		next.timerInfo = next.sharedStartTimeRemaining > 0
+			? { phase: 'SHARED_START', targetPlayerIndex: next.activePlayerIndex }
+			: { phase: 'POOL_TIME', targetPlayerIndex: idx };
+		return next;
+	}
+	// Variant B
 	const next = structuredClone(state);
-	const cfg = next.config.timerConfig as TimerConfigB;
-	next.reactivePlayerIndex = idx;
-	next.players[idx].reactionTimeRemaining = getScaledReactionTime(cfg, next.currentRound);
+	const cfgB = next.config.timerConfig as TimerConfigB;
+	next.reactivePlayerIndices = [...next.reactivePlayerIndices.filter(i => i !== idx), idx];
+	next.players[idx].reactionTimeRemaining = getScaledReactionTime(cfgB, next.currentRound);
 	next.timerInfo = { phase: 'REACTION_TIME', targetPlayerIndex: idx };
 	return next;
 }
 
-export function returnToActivePlayer(state: GameState): GameState {
-	if (state.config.timerConfig.variant === 'A') return state;
+export function removeReactivePlayer(state: GameState, idx: number): GameState {
+	const cfg = state.config.timerConfig;
+	if (cfg.variant === 'none') return state;
 	const next = structuredClone(state);
-	if (next.reactivePlayerIndex !== null) next.players[next.reactivePlayerIndex].reactionTimeRemaining = 0;
-	next.reactivePlayerIndex = null;
+	// Clear reaction time for the removed player
+	if (cfg.variant === 'B') {
+		next.players[idx].reactionTimeRemaining = 0;
+	}
+	next.reactivePlayerIndices = next.reactivePlayerIndices.filter(i => i !== idx);
+	// If there are still reactive players, switch timer to the last one
+	if (next.reactivePlayerIndices.length > 0) {
+		const newCurrentIdx = next.reactivePlayerIndices[next.reactivePlayerIndices.length - 1];
+		if (cfg.variant === 'A') {
+			next.timerInfo = next.sharedStartTimeRemaining > 0
+				? { phase: 'SHARED_START', targetPlayerIndex: next.activePlayerIndex }
+				: { phase: 'POOL_TIME', targetPlayerIndex: newCurrentIdx };
+		} else {
+			const p = next.players[newCurrentIdx];
+			next.timerInfo = p.reactionTimeRemaining > 0
+				? { phase: 'REACTION_TIME', targetPlayerIndex: newCurrentIdx }
+				: { phase: 'POOL_TIME', targetPlayerIndex: newCurrentIdx };
+		}
+	} else {
+		// No reactive players left — return to active
+		const active = next.players[next.activePlayerIndex];
+		if (cfg.variant === 'A') {
+			next.timerInfo = next.sharedStartTimeRemaining > 0
+				? { phase: 'SHARED_START', targetPlayerIndex: next.activePlayerIndex }
+				: { phase: 'PLAYER_TIME', targetPlayerIndex: next.activePlayerIndex };
+		} else {
+			next.timerInfo = active.playerTimeRemaining > 0
+				? { phase: 'PLAYER_TIME', targetPlayerIndex: next.activePlayerIndex }
+				: { phase: 'POOL_TIME', targetPlayerIndex: next.activePlayerIndex };
+		}
+	}
+	return next;
+}
+
+export function returnToActivePlayer(state: GameState): GameState {
+	const cfg = state.config.timerConfig;
+	if (cfg.variant === 'none') return state;
+	if (cfg.variant === 'A') {
+		const next = structuredClone(state);
+		next.reactivePlayerIndices = [];
+		next.timerInfo = next.sharedStartTimeRemaining > 0
+			? { phase: 'SHARED_START', targetPlayerIndex: next.activePlayerIndex }
+			: { phase: 'PLAYER_TIME', targetPlayerIndex: next.activePlayerIndex };
+		return next;
+	}
+	// Variant B
+	const next = structuredClone(state);
+	for (const idx of next.reactivePlayerIndices) {
+		next.players[idx].reactionTimeRemaining = 0;
+	}
+	next.reactivePlayerIndices = [];
 	const active = next.players[next.activePlayerIndex];
 	next.timerInfo = active.playerTimeRemaining > 0
 		? { phase: 'PLAYER_TIME', targetPlayerIndex: next.activePlayerIndex }
@@ -105,7 +180,7 @@ export function returnToActivePlayer(state: GameState): GameState {
 
 export function nextTurn(state: GameState): GameState {
 	const next = structuredClone(state);
-	next.reactivePlayerIndex = null;
+	next.reactivePlayerIndices = [];
 	next.turnCount++;
 
 	let idx = (next.activePlayerIndex + 1) % next.players.length;
@@ -117,13 +192,16 @@ export function nextTurn(state: GameState): GameState {
 	const alive = next.players.filter((p) => !p.isDead).length;
 	if (alive > 0 && next.turnCount % alive === 0) next.currentRound++;
 
-	if (next.config.timerConfig.variant === 'A') {
+	const cfg = next.config.timerConfig;
+	if (cfg.variant === 'none') {
+		next.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: idx };
+	} else if (cfg.variant === 'A') {
 		next.timerInfo = next.sharedStartTimeRemaining > 0
 			? { phase: 'SHARED_START', targetPlayerIndex: idx }
 			: { phase: 'PLAYER_TIME', targetPlayerIndex: idx };
 	} else {
-		const cfg = next.config.timerConfig as TimerConfigB;
-		next.players[idx].playerTimeRemaining = getScaledPlayerTime(cfg, next.currentRound);
+		const cfgB = next.config.timerConfig as TimerConfigB;
+		next.players[idx].playerTimeRemaining = getScaledPlayerTime(cfgB, next.currentRound);
 		next.timerInfo = { phase: 'PLAYER_TIME', targetPlayerIndex: idx };
 	}
 	return next;
@@ -136,6 +214,7 @@ export function isCritical(seconds: number): boolean {
 }
 
 export function getCurrentTickingTime(state: GameState): number {
+	if (state.config.timerConfig.variant === 'none') return 0;
 	const { phase, targetPlayerIndex } = state.timerInfo;
 	const p = state.players[targetPlayerIndex];
 	if (!p) return 0;

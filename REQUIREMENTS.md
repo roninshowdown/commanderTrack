@@ -86,24 +86,31 @@
 
 **REQ-SETUP-004:** The system shall preload all players and decks from the data service on setup page load to avoid async race conditions in dropdown rendering.
 
-**REQ-SETUP-005:** The user shall be able to select the starting life total from the options: 20, 25, 30, 40 (default), and 50.
+**REQ-SETUP-005:** The user shall be able to select the starting life total from the options: 20, 40 (default), 60, and 80.
 
-**REQ-SETUP-006:** The user shall be able to select one of two timer variants: Variant A or Variant B (default).
+**REQ-SETUP-006:** The user shall be able to toggle the timer on or off. When the timer is enabled, the user shall select one of two timer styles: **Simple** (Variant A) or **Progressive** (Variant B, default).
 
-**REQ-SETUP-007:** For **Timer Variant A**, the user shall configure:
-- Pool Time (minutes, default 30, range 1–120)
-- Shared Start Time (minutes, default 10, range 1–60)
+**REQ-SETUP-007:** For **Simple Timer (Variant A)**, the user shall configure:
+- Player Pool Time (minutes, default 30, range 1–120)
+- Shared Start Time (minutes, default 10, range 1–60) with quick-pick suggestions (5, 10, 15, 20 min) and a hint describing its purpose
+- Reaction option toggle — when enabled, non-active players can have priority passed to them, consuming their Player Pool Time
 
-**REQ-SETUP-008:** For **Timer Variant B**, the user shall configure:
-- Pool Time (minutes, default 30, range 1–120)
-- Player Time (minutes, default 2, range 0.5–30, step 0.5)
+**REQ-SETUP-008:** For **Progressive Timer (Variant B)**, the user shall configure:
+- Player Pool Time (minutes, default 30, range 1–120)
+- Player Turn Time (minutes, default 2, range 0.5–30, step 0.5)
 - Reaction Time (minutes, default 1, range 0.5–30, step 0.5)
-- Scale Factor for Player Time (seconds/round, default 10, range 0–60)
-- Scale Factor for Reaction Time (seconds/round, default 10, range 0–60)
+- Increase Player Time Per Round (seconds/round, default 10, range 0–60)
+- Increase React Time Per Round (seconds/round, default 10, range 0–60)
 
 **REQ-SETUP-009:** The system shall validate that all player slots have both a player and a deck selected before allowing the game to start. If validation fails, a toast error message shall identify the incomplete slot.
 
 **REQ-SETUP-010:** Clicking "Start Game" shall initialize the game state in the game store and navigate the user to the game page.
+
+**REQ-SETUP-011:** When the timer is disabled (`TimerConfigNone`), the game shall auto-start (skip the IDLE phase). The timer display shall be replaced with a round/turn counter. Pool time shall not be shown on player tiles.
+
+**REQ-SETUP-012:** When a player is selected in a slot, the system shall automatically pre-fill the deck dropdown with the player's most-played deck (based on historical game records). If only one deck exists, it shall be auto-selected. If no history exists, no deck is pre-selected.
+
+**REQ-SETUP-013:** The timer toggle shall be a clearly visible on/off control at the top of the Timer section. When disabled, all timer configuration fields shall be hidden.
 
 ---
 
@@ -117,11 +124,13 @@
 
 **REQ-LIFE-004:** When a player's life total reaches 0 or below, the system shall mark that player as dead (life clamped to 0, `isDead = true`).
 
-**REQ-LIFE-005:** A dead player's tile shall be visually dimmed (reduced opacity, grayscale filter) and their interaction controls shall be disabled.
+**REQ-LIFE-005:** A dead player's tile shall be visually dimmed and life-adjustment controls shall be disabled.
 
 **REQ-LIFE-006:** The system shall track cumulative `totalLifeGained` and `totalLifeLost` for each player over the course of a game.
 
 **REQ-LIFE-007:** Every life change event shall generate a log entry recording the game ID, player ID, player name, value (+/−), type (`life`), and timestamp.
+
+**REQ-LIFE-008:** In game mode, only the skull control on a dead player's tile may trigger a revive flow. Reviving shall require explicit confirmation via a toast anchored above that player's tile, auto-close after 2 seconds, and restore the player to exactly 1 life.
 
 ---
 
@@ -131,7 +140,7 @@
 
 **REQ-CMD-002:** When commander damage mode is activated, the user shall first tap a player tile to select the **source** (attacking) commander.
 
-**REQ-CMD-003:** After the source is selected, the user shall use the − button on a **different** player (target) to apply commander damage from the selected source.
+**REQ-CMD-003:** After the source is selected, the user shall use the + button on a target player to apply commander damage from the selected source, while the − button shall reduce tracked commander damage from that source (healing life accordingly).
 
 **REQ-CMD-004:** Commander damage shall reduce the target player's life total and be tracked per-source in the `commanderDamageTaken` map (keyed by source player ID).
 
@@ -169,9 +178,11 @@
 
 **REQ-TMR-A02:** When the shared start timer reaches 0, the system shall automatically transition to the `PLAYER_TIME` phase, which counts down the active player's pool time.
 
-**REQ-TMR-A03:** In Variant A, there is no reaction time concept. Clicking a non-active player shall have no timer effect.
+**REQ-TMR-A03:** In Variant A without reaction enabled, clicking a non-active player tile shall have no timer effect.
 
 **REQ-TMR-A04:** When advancing to the next turn in Variant A, if shared start time remains, the new player's turn begins in `SHARED_START` phase; otherwise, it begins in `PLAYER_TIME` phase.
+
+**REQ-TMR-A05:** When Variant A is configured with reaction enabled (`enableReaction: true`), clicking a non-active, non-dead player tile shall set them as the reactive player. The timer shall drain the reactive player's **Player Pool Time** (no separate reaction timer). A "Return" button shall be available to return priority to the active player.
 
 ### 6.3 Variant B Timer
 
@@ -274,6 +285,26 @@
 **REQ-LOG-018:** The global view shall display a doughnut chart of "Deck Usage" showing the top 10 most-used decks.
 
 **REQ-LOG-019:** The global view shall display integrated rankings with Players/Decks sub-tabs and sort controls (Won, Played, Lost). The #1 ranked entry shall display a crown icon.
+
+### 9.4 Operational Diagnostics
+
+**REQ-OPS-001:** The client shall maintain a structured runtime log in localStorage key `ct_log` with rolling retention capped at 500 entries.
+
+**REQ-OPS-002:** Each structured log entry shall include `timestamp`, `level` (`error|warn|info`), `source`, `message`, and optional serializable `context`.
+
+**REQ-OPS-003:** A debug-only log viewer shall be available on the profile page with filtering by level/source and JSON export.
+
+### 9.5 Analytics V2 (Isolated Draft)
+
+**REQ-ANL2-001:** The system shall provide a standalone `/analytics-v2` route that is fully isolated from the existing analytics page and does not modify legacy analytics behavior.
+
+**REQ-ANL2-002:** Analytics V2 shall compute and display core measures for Time, Damage, Heal, Commander Damage, Round, Reactions, and Win using zone-scoped game history.
+
+**REQ-ANL2-003:** Analytics V2 shall use an isolated telemetry stream (`analyticsEventsV2`) for reaction and round-marker events, separate from legacy `gameLogs`.
+
+**REQ-ANL2-004:** Analytics V2 shall remain read-oriented for presentation and may only persist telemetry events generated during gameplay.
+
+**REQ-ANL2-005:** The existing `/log` analytics route shall remain available and unchanged for side-by-side comparison during draft evaluation.
 
 ---
 
@@ -412,6 +443,8 @@
 **REQ-PWA-005:** When offline and a navigation request cannot be fulfilled, the service worker shall serve `/index.html` as a fallback; if that is also unavailable, return a 503 "Offline" response.
 
 **REQ-PWA-006:** On service worker activation, old caches (from previous versions) shall be purged.
+
+**REQ-PWA-007:** During an active game session, the app shall attempt to keep the screen awake using the Screen Wake Lock API where supported. If unsupported or denied, gameplay must continue without errors.
 
 ---
 
@@ -561,9 +594,38 @@
 
 **REQ-UI-027:** In landscape orientation on viewports ≤ 500px height, the game page shall fit within the viewport without vertical scrolling.
 
-**REQ-UI-028:** In landscape game mode, the top navigation bar shall be hidden. A "Menu" button shall be added to the game controls to provide navigation back to the home page.
+**REQ-UI-028:** In landscape game mode, the top navigation bar shall be hidden. Core game actions shall remain available from the in-game controls without requiring a separate top-bar menu.
 
 **REQ-UI-029:** In landscape game mode, player tiles, timer display, and game controls shall use compact sizing (reduced min-heights, smaller fonts, icon-only controls where appropriate).
+
+**REQ-UI-030:** For 4-player games, the game page shall provide a centered expandable action wheel. Expanding the wheel shall expose icon buttons for New Game, Finish Game, Cancel Game, Pause/Resume (when timer is enabled), Random Opponent, Commander Damage mode, and Next Turn.
+
+**REQ-UI-031:** The center of the 4-player action wheel shall display the currently ticking timer value and round/turn meta when timer tracking is enabled. If timer tracking is disabled, the center shall show a generic actions state.
+
+**REQ-UI-032:** Finishing a game from in-game controls shall open a winner picker modal with a Return action that closes the picker without finishing the game.
+
+**REQ-UI-033:** In 4-player game mode, the action wheel long-press detection shall use a 200ms threshold. After the threshold, the sweep ring shall animate for 250ms before opening the wheel, and quick taps shall not show the ring.
+
+**REQ-UI-034:** In 4-player game mode, active/reacting status shall be emphasized with center-facing arc labels and matching center-corner border highlights on the related player tiles.
+
+**REQ-UI-035:** In 4-player game mode, readability-first visual treatment shall apply: larger center wheel, increased timer prominence, and enhanced tile background visibility with localized contrast support for numeric/time content.
+
+**REQ-UI-036:** When the 4-player wheel menu is open, and during start-phase picking/countdown overlays, the battlefield background shall be heavily dimmed and blurred, and non-overlay interactions shall be blocked until the overlay closes.
+
+**REQ-UI-037:** In the pre-start view (`IDLE` + start ceremony), 4-player tiles shall show commander image + player name only (no life controls). Seat swapping shall be supported via hold-drag (200ms pickup) and drop-to-swap between two tiles.
+
+**REQ-UI-038:** Seat swaps performed in pre-start view shall update the actual players array order used for turn order and game start selection.
+
+**REQ-UI-039:** In 4-player wheel mode, opening the winner selection modal or leaving to the menu shall pause active timer progression while the user is outside normal in-game interaction.
+
+**REQ-UI-040:** In battlefield wheel mode, the center wheel shall include an always-visible outer segmented ring. The ring shall render one segment per current player, align segment order with battlefield seating, use the same active/reactive highlight colors as player tile center emphasis, and render non-highlighted segments as transparent.
+
+
+**REQ-TMR-011:** When a reactive player is active, clicking that same reactive player's tile again shall return priority to the active player.
+
+**REQ-TMR-012:** In 4-player wheel mode, when the center timer is currently draining `POOL_TIME`, the center countdown value shall be rendered in danger red to indicate individual pool consumption.
+
+**REQ-GAME-021:** In 4-player wheel mode, interaction handling shall ensure: (a) only one reactive player at a time, (b) Random Opponent roulette transitions with deterministic settle behavior, (c) long-press step actions use a 500ms cadence, and (d) wheel/timer visuals remain legible in mobile landscape.
 
 ---
 
@@ -578,6 +640,7 @@
 | **GameState** | `config`, `players[]`, `activePlayerIndex`, `reactivePlayerIndex`, `currentRound`, `turnCount`, `isRunning`, `isFinished`, `winnerId`, `timerInfo` |
 | **GameRecord** | `id`, `playerIds[]`, `deckIds[]`, `maxLife`, `timerVariant`, `winnerId`, `createdAt`, `finishedAt` |
 | **LogEntry** | `id`, `gameId`, `playerId`, `playerName`, `value`, `type`, `sourcePlayerId?`, `timestamp` |
+| **AnalyticsEventV2** | `id`, `gameId`, `zoneId`, `type`, `timestamp`, `playerId?`, `round?` |
 | **RankEntry** | `playerId`, `playerName`, `deckId?`, `commanderName?`, `gamesPlayed`, `gamesWon`, `gamesLost`, `winRate` |
 
 ---

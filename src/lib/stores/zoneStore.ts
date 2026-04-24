@@ -5,6 +5,7 @@
 import { writable, derived, get } from 'svelte/store';
 import type { CommanderZone, Player, Deck, AccountProfile } from '$lib/models/types';
 import { getDataService } from '$lib/services/data-service';
+import { logger } from '$lib/services/logger';
 
 const CURRENT_ZONE_KEY = 'ct_currentZoneId';
 
@@ -35,7 +36,7 @@ export async function loadUserZones(uid: string): Promise<void> {
 			else localStorage.removeItem(CURRENT_ZONE_KEY);
 		}
 	} catch (e) {
-		console.warn('[zoneStore] Failed to load zones:', e);
+		logger.warn('zoneStore.loadUserZones', 'Failed to load zones', e);
 	}
 }
 
@@ -56,7 +57,7 @@ export async function createZone(
 		const ds = await getDataService();
 		const id = await ds.createZone({
 			name,
-			password: password || undefined,
+			...(password ? { password } : {}),
 			creatorId: uid,
 			memberIds: [uid],
 			members: {
@@ -68,7 +69,7 @@ export async function createZone(
 		switchZone(id);
 		return id;
 	} catch (e) {
-		console.warn('[zoneStore] Failed to create zone:', e);
+		logger.warn('zoneStore.createZone', 'Failed to create zone', e);
 		return null;
 	}
 }
@@ -104,7 +105,7 @@ export async function joinZone(
 		switchZone(zoneId);
 		return true;
 	} catch (e) {
-		console.warn('[zoneStore] Failed to join zone:', e);
+		logger.warn('zoneStore.joinZone', 'Failed to join zone', e);
 		return false;
 	}
 }
@@ -129,7 +130,7 @@ export async function leaveZone(uid: string, zoneId: string): Promise<boolean> {
 		await loadUserZones(uid);
 		return true;
 	} catch (e) {
-		console.warn('[zoneStore] Failed to leave zone:', e);
+		logger.warn('zoneStore.leaveZone', 'Failed to leave zone', e);
 		return false;
 	}
 }
@@ -147,7 +148,7 @@ export async function deleteZone(uid: string, zoneId: string): Promise<boolean> 
 		await loadUserZones(uid);
 		return true;
 	} catch (e) {
-		console.warn('[zoneStore] Failed to delete zone:', e);
+		logger.warn('zoneStore.deleteZone', 'Failed to delete zone', e);
 		return false;
 	}
 }
@@ -213,7 +214,7 @@ export async function removeMemberFromZone(
 		await loadUserZones(callerUid);
 		return true;
 	} catch (e) {
-		console.warn('[zoneStore] Failed to remove member:', e);
+		logger.warn('zoneStore.removeMemberFromZone', 'Failed to remove member', e);
 		return false;
 	}
 }

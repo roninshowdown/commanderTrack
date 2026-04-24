@@ -9,6 +9,18 @@ const SOUNDS = {
 	turnEnd: [440, 554.37, 659.25]
 } as const;
 
+const SOUND_PREFS_KEY = 'ct_sound_prefs';
+
+export interface SoundPreferences {
+	activeReactive: boolean;
+	lifeGainLoss: boolean;
+}
+
+const DEFAULT_PREFS: SoundPreferences = {
+	activeReactive: true,
+	lifeGainLoss: true
+};
+
 let ctx: AudioContext | null = null;
 
 function getCtx(): AudioContext {
@@ -37,8 +49,26 @@ function playSeq(freqs: readonly number[]): void {
 	freqs.forEach((f, i) => playTone(f, note, now + i * note));
 }
 
-export const playGainSound = () => playSeq(SOUNDS.gain);
-export const playLossSound = () => playSeq(SOUNDS.loss);
-export const playCriticalSound = () => playSeq(SOUNDS.critical);
-export const playTurnEndSound = () => playSeq(SOUNDS.turnEnd);
+export function getSoundPreferences(): SoundPreferences {
+	try {
+		const raw = localStorage.getItem(SOUND_PREFS_KEY);
+		if (!raw) return { ...DEFAULT_PREFS };
+		const parsed = JSON.parse(raw) as Partial<SoundPreferences>;
+		return {
+			activeReactive: parsed.activeReactive ?? DEFAULT_PREFS.activeReactive,
+			lifeGainLoss: parsed.lifeGainLoss ?? DEFAULT_PREFS.lifeGainLoss
+		};
+	} catch {
+		return { ...DEFAULT_PREFS };
+	}
+}
+
+export function setSoundPreferences(next: SoundPreferences): void {
+	localStorage.setItem(SOUND_PREFS_KEY, JSON.stringify(next));
+}
+
+export const playGainSound = () => { if (getSoundPreferences().lifeGainLoss) playSeq(SOUNDS.gain); };
+export const playLossSound = () => { if (getSoundPreferences().lifeGainLoss) playSeq(SOUNDS.loss); };
+export const playCriticalSound = () => { if (getSoundPreferences().activeReactive) playSeq(SOUNDS.critical); };
+export const playTurnEndSound = () => { if (getSoundPreferences().activeReactive) playSeq(SOUNDS.turnEnd); };
 

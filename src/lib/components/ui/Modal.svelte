@@ -42,19 +42,22 @@
 		position: fixed; inset: 0; z-index: 1000;
 		background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
 		padding: var(--space-md);
+		overflow: hidden;
 	}
 	.modal {
-		width: 100%; max-width: 420px; max-height: 90dvh; overflow-y: auto;
+		width: 100%; max-width: 420px; max-height: 90dvh; overflow: hidden;
 		background: var(--color-surface); border: 1px solid var(--color-surface-elevated);
 		border-radius: var(--radius-xl); padding: var(--space-lg);
 		box-shadow: var(--shadow-lg);
+		display: flex;
+		flex-direction: column;
 	}
 	.modal-header {
 		display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);
 	}
 	.modal-header h2 { font-size: 1rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-primary); }
 	.close-btn { font-size: 1.2rem; color: var(--color-text-muted); min-height: 36px; }
-	.modal-body { display: flex; flex-direction: column; gap: var(--space-md); }
+	.modal-body { display: flex; flex-direction: column; gap: var(--space-md); overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
 </style>
 
 

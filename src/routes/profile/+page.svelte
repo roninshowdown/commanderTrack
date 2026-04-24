@@ -11,7 +11,8 @@
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import Toast from '$lib/components/ui/Toast.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
-	import ColorPip from '$lib/components/ui/ColorPip.svelte';
+	import ManaIcon from '$lib/components/ui/ManaIcon.svelte';
+	import LogViewer from '$lib/components/ui/LogViewer.svelte';
 
 	const devMode = isDebugMode();
 	let user = $derived($authUser);
@@ -38,7 +39,7 @@
 	let deckSuggestions: string[] = $state([]);
 	let showSuggestions: boolean = $state(false);
 	let savingDeck: boolean = $state(false);
-	const allColors: MtgColor[] = ['white', 'blue', 'black', 'red', 'green'];
+
 
 	onMount(loadData);
 
@@ -76,15 +77,17 @@
 	async function saveProfile() {
 		savingProfile = true;
 		try {
-			let finalImage = imageUrl || undefined;
+			if (!userUid) throw new Error('Missing authenticated user id');
+			let finalImage = profile?.imageUrl ?? undefined;
 			if (selectedFile) {
 				finalImage = (devMode || !isFirebaseConfigured())
 					? await toBase64(selectedFile)
-					: await uploadPlayerImage(selectedFile);
+					: await uploadPlayerImage(selectedFile, userUid);
 			}
 			const ds = await getDataService();
 			await ds.upsertAccountProfile(userUid, { imageUrl: finalImage });
 			profile = { imageUrl: finalImage };
+			imageUrl = finalImage ?? '';
 			previewUrl = finalImage ?? '';
 			selectedFile = null;
 			toast = { message: 'Profile updated', type: 'success' };
@@ -125,9 +128,6 @@
 		} else showSuggestions = false;
 	}
 	function selectSuggestion(n: string) { deckName = n; showSuggestions = false; searchCard(); }
-	function toggleColor(c: MtgColor) {
-		deckColors = deckColors.includes(c) ? deckColors.filter((x) => x !== c) : [...deckColors, c];
-	}
 
 	async function saveDeck() {
 		if (!deckName.trim()) return;
@@ -182,11 +182,6 @@
 				{/if}
 				<div class="avatar-controls">
 					<div class="field">
-						<label for="pf-url">Image URL</label>
-						<input id="pf-url" type="text" bind:value={imageUrl} placeholder="https://…"
-							oninput={() => { previewUrl = imageUrl; selectedFile = null; }} />
-					</div>
-					<div class="field">
 						<label for="pf-upload">Upload Image</label>
 						<input id="pf-upload" type="file" accept="image/jpeg,image/png,image/gif,image/webp" onchange={onFileChange} />
 					</div>
@@ -215,7 +210,7 @@
 							{:else}<div class="deck-img ph"><Icon name="deck" size={20} color="var(--color-text-muted)" /></div>{/if}
 							<div class="info">
 								<span class="cmd">{d.commanderName}</span>
-								<div class="pips">{#each d.colors as c}<ColorPip color={c} size={14} />{/each}</div>
+								<div class="pips">{#each d.colors as c}<ManaIcon color={c} size={18} />{/each}</div>
 							</div>
 							<div class="actions">
 								<Button variant="ghost" size="sm" onclick={() => openEditDeck(d)}>{#snippet children()}<Icon name="edit" size={16} />{/snippet}</Button>
@@ -226,6 +221,10 @@
 				</div>
 			{/if}
 		</section>
+
+		{#if devMode}
+			<LogViewer />
+		{/if}
 	{/if}
 </div>
 
@@ -256,12 +255,12 @@
 				</div>
 			</div>
 			<div class="field">
-				<span class="field-label">Colors</span>
+				<span class="field-label">Colors <span class="color-hint">(derived from commander)</span></span>
 				<div class="color-row">
-					{#each allColors as c}
-						<button type="button" class="color-pill" class:active={deckColors.includes(c)} onclick={() => toggleColor(c)}>
-							<ColorPip color={c} size={28} active={deckColors.includes(c)} />
-						</button>
+					{#each (['white','blue','black','red','green'] as const) as c}
+						<span class="color-pip-wrap" class:inactive={!deckColors.includes(c)}>
+							<ManaIcon color={c} size={36} />
+						</span>
 					{/each}
 				</div>
 			</div>
@@ -309,8 +308,9 @@
 	.suggestions button { display: block; width: 100%; text-align: left; padding: var(--space-sm) var(--space-md); font-size: .85rem; }
 	.suggestions button:hover { background: var(--color-surface-hover); }
 	.color-row { display: flex; gap: var(--space-sm); }
-	.color-pill { padding: 4px; border-radius: var(--radius-full); border: 2px solid transparent; }
-	.color-pill.active { border-color: var(--color-secondary); }
+	.color-pip-wrap { transition: opacity 0.2s; }
+	.color-pip-wrap.inactive { opacity: 0.2; filter: grayscale(0.8); }
+	.color-hint { font-size: 0.7rem; color: var(--color-text-muted); font-weight: 400; }
 	.preview { width: 100%; max-width: 200px; border-radius: var(--radius-md); margin-top: var(--space-sm); }
 	.form-actions { display: flex; justify-content: flex-end; gap: var(--space-sm); margin-top: var(--space-md); }
 </style>

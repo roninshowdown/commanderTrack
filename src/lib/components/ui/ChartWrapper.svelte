@@ -4,8 +4,20 @@
 
 	Chart.register(...registerables);
 
-	interface Props { type: string; data: any; height?: number; }
-	let { type, data, height = 200 }: Props = $props();
+	interface ChartPointClick {
+		label: string;
+		value: number;
+		datasetLabel: string;
+	}
+
+	interface Props {
+		type: string;
+		data: any;
+		height?: number;
+		options?: any;
+		onPointClick?: (point: ChartPointClick) => void;
+	}
+	let { type, data, height = 200, options = {}, onPointClick }: Props = $props();
 
 	let canvas: HTMLCanvasElement;
 	let chart: Chart | null = null;
@@ -26,7 +38,19 @@
 				scales: type === 'doughnut' ? {} : {
 					x: { ticks: { color: '#4a4a64', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
 					y: { ticks: { color: '#4a4a64', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+				},
+				onClick: (_event: unknown, elements: Array<{ datasetIndex: number; index: number }>) => {
+					if (!onPointClick || !elements.length || !chart) return;
+					const el = elements[0];
+					const ds = chart.data.datasets[el.datasetIndex] as { label?: string; data?: unknown[] };
+					onPointClick({
+						label: String(chart.data.labels?.[el.index] ?? ''),
+						value: Number(ds?.data?.[el.index] ?? 0),
+						datasetLabel: ds?.label ?? ''
+					});
 				}
+				,
+				...options
 			}
 		});
 	}
@@ -41,6 +65,8 @@
 		// re-render when data or type changes (but skip initial — onMount handles it)
 		void data;
 		void type;
+		void options;
+		void onPointClick;
 		if (mounted) {
 			tick().then(render);
 		}

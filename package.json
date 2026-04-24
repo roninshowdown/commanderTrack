@@ -12,9 +12,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "deploy": "npm run build && firebase deploy --only hosting",
+    "deploy": "node scripts/switch-env.js firebase && npm run build && firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore:rules",
-    "deploy:all": "npm run build && firebase deploy"
+    "deploy:indexes": "firebase deploy --only firestore:indexes",
+    "deploy:storage": "firebase deploy --only storage",
+    "deploy:all": "node scripts/switch-env.js firebase && npm run build && firebase deploy"
   },
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.0",

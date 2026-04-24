@@ -35,6 +35,10 @@
 		'chevron-up': 'M18 15l-6-6-6 6',
 		'chevron-down': 'M6 9l6 6 6-6',
 		menu: 'M3 12h18M3 6h18M3 18h18',
+		qr: 'M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM15 13h2v2h-2zM19 13h2v2h-2zM15 17h2v2h-2zM17 19h4v2h-4zM13 15h2v6h-2z',
+		undo: 'M3 10h10a5 5 0 010 10H9M3 10l4-4M3 10l4 4',
+		x: 'M18 6L6 18M6 6l12 12',
+		copy: 'M9 9V4a2 2 0 012-2h9a2 2 0 012 2v11a2 2 0 01-2 2h-5M9 9H4a2 2 0 00-2 2v9a2 2 0 002 2h11a2 2 0 002-2v-5M9 9h11',
 	};
 </script>
 

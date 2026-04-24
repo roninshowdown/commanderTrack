@@ -2,6 +2,15 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isZoneCreator(zoneId) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/zones/$(zoneId)).data.creatorId == request.auth.uid;
+    }
+
     // Account profiles — users can only write their own
     match /profiles/{uid} {
       allow read: if request.auth != null;
@@ -33,12 +42,23 @@ service cloud.firestore {
 
     // Game records — scoped by zone, any authenticated user
     match /games/{gameId} {
-      allow read, write: if request.auth != null;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isZoneCreator(resource.data.zoneId);
     }
 
     // Game logs
     match /gameLogs/{logId} {
-      allow read, write: if request.auth != null;
+      allow read, create, update: if isSignedIn();
+      allow delete: if isSignedIn() && (
+        !('zoneId' in resource.data) || resource.data.zoneId == null || isZoneCreator(resource.data.zoneId)
+      );
+    }
+
+    // Analytics V2 telemetry stream
+    match /analyticsEventsV2/{eventId} {
+      allow read, create, update: if isSignedIn();
+      allow delete: if isZoneCreator(resource.data.zoneId);
     }
   }
 }

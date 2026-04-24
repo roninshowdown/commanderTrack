@@ -3,6 +3,7 @@
    ============================================ */
 
 import type { MtgColor } from '$lib/models/types';
+import { logger } from '$lib/services/logger';
 
 const API = 'https://api.scryfall.com';
 
@@ -37,7 +38,8 @@ export async function searchCommander(name: string): Promise<ScryfallResult | nu
 		if (!res.ok) return null;
 		const card: ScryfallCard = await res.json();
 		return { name: card.name, imageUrl: imageUrl(card), colors: mapColors(card.color_identity ?? card.colors ?? []) };
-	} catch {
+	} catch (e) {
+		logger.warn('scryfall.searchCommander', 'Scryfall fuzzy search failed', { name, error: e });
 		return null;
 	}
 }
@@ -48,7 +50,8 @@ export async function autocompleteCardName(q: string): Promise<string[]> {
 		const res = await fetch(`${API}/cards/autocomplete?q=${encodeURIComponent(q)}`);
 		if (!res.ok) return [];
 		return ((await res.json()).data as string[]) ?? [];
-	} catch {
+	} catch (e) {
+		logger.warn('scryfall.autocompleteCardName', 'Scryfall autocomplete failed', { query: q, error: e });
 		return [];
 	}
 }

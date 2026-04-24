@@ -31,16 +31,18 @@ export interface Deck {
 }
 
 /** Timer variant identifier */
-export type TimerVariant = 'A' | 'B';
+export type TimerVariant = 'A' | 'B' | 'none';
 
-/** Variant A timer config */
+/** Variant A (Simple) timer config */
 export interface TimerConfigA {
 	variant: 'A';
 	poolTimeSeconds: number;
 	sharedStartTimeSeconds: number;
+	/** If true, non-active players can claim reaction time that drains their pool time */
+	enableReaction?: boolean;
 }
 
-/** Variant B timer config */
+/** Variant B (Progressive) timer config */
 export interface TimerConfigB {
 	variant: 'B';
 	poolTimeSeconds: number;
@@ -50,7 +52,12 @@ export interface TimerConfigB {
 	scaleFactorReactionTimeSeconds: number;
 }
 
-export type TimerConfig = TimerConfigA | TimerConfigB;
+/** No timer — turns and rounds are tracked but no countdown runs */
+export interface TimerConfigNone {
+	variant: 'none';
+}
+
+export type TimerConfig = TimerConfigA | TimerConfigB | TimerConfigNone;
 
 /** Game configuration created during setup */
 export interface GameConfig {
@@ -96,7 +103,8 @@ export interface GameState {
 	config: GameConfig;
 	players: GamePlayerState[];
 	activePlayerIndex: number;
-	reactivePlayerIndex: number | null;
+	reactivePlayerIndices: number[];
+	eliminationOrder: string[];
 	currentRound: number;
 	turnCount: number;
 	isRunning: boolean;
@@ -119,6 +127,20 @@ export interface LogEntry {
 	zoneId?: string;
 }
 
+/** Analytics V2 event stream (isolated from LogEntry history) */
+export type AnalyticsEventTypeV2 = 'reaction' | 'reaction_claimed' | 'reaction_dropped' | 'round_marker' | 'turn_start';
+
+/** Analytics V2 event persisted for additional measures like reactions and rounds */
+export interface AnalyticsEventV2 {
+	id: string;
+	gameId: string;
+	zoneId: string;
+	type: AnalyticsEventTypeV2;
+	timestamp: number;
+	playerId?: string;
+	round?: number;
+}
+
 /** Rank entry (computed, not stored) */
 export interface RankEntry {
 	playerId: string;
@@ -139,9 +161,14 @@ export interface GameRecord {
 	maxLife: number;
 	timerVariant: TimerVariant;
 	winnerId: string | null;
+	secondPlaceId?: string | null;
+	thirdPlaceId?: string | null;
+	eliminationOrder?: string[];
 	createdAt: number;
 	finishedAt: number | null;
 	zoneId: string;
+	/** Pool time consumed per player (seconds), parallel to playerIds. Only present for timed games. */
+	playerTimeConsumed?: number[];
 }
 
 /* ── Commander Zone ── */

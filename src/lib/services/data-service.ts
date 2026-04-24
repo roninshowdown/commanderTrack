@@ -6,6 +6,7 @@
 import type { DataService } from './data-service.interface';
 import { LocalStorageService } from './local-storage.service';
 import { isDebugMode } from '$lib/utils/env';
+import { logger } from '$lib/services/logger';
 
 let _instance: DataService | null = null;
 let _initPromise: Promise<DataService> | null = null;
@@ -35,7 +36,7 @@ export async function getDataService(): Promise<DataService> {
 				]);
 				_instance = new (mod as { FirebaseDataService: new () => DataService }).FirebaseDataService();
 			} catch (e) {
-				console.warn('[data-service] Firebase failed, falling back to localStorage:', e);
+				logger.warn('data-service.getDataService', 'Firebase failed, falling back to localStorage', e);
 				_instance = new LocalStorageService();
 			}
 		} else if (isDebugMode()) {

@@ -16,13 +16,11 @@
 
 	let { player = null, onsave, oncancel, disabled = false }: Props = $props();
 
-	const initialName = player?.name ?? '';
-	const initialImage = player?.imageUrl ?? '';
-
-	let name: string = $state(initialName);
-	let imageUrl: string = $state(initialImage);
+	/* svelte-ignore state_referenced_locally — form fields intentionally capture initial prop values */
+	let name: string = $state(player?.name ?? '');
+	let imageUrl: string = $state(player?.imageUrl ?? '');
 	let selectedFile: File | null = $state(null);
-	let previewUrl: string = $state(initialImage);
+	let previewUrl: string = $state(player?.imageUrl ?? '');
 	let searching: boolean = $state(false);
 	let uploading: boolean = $state(false);
 

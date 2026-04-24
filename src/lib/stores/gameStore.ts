@@ -3,14 +3,24 @@
    ============================================ */
 
 import { writable, derived, get } from 'svelte/store';
-import type { GameState, GameConfig, GamePlayerState, LogEntry, TimerConfigA, TimerConfigB, ActiveGameData } from '$lib/models/types';
+import type {
+	GameState,
+	GameConfig,
+	GamePlayerState,
+	LogEntry,
+	TimerConfigA,
+	TimerConfigB,
+	ActiveGameData,
+	AnalyticsEventTypeV2
+} from '$lib/models/types';
 import {
-	tick, startGame, togglePause, passToReactivePlayer, returnToActivePlayer,
+	tick, startGame, togglePause, passToReactivePlayer, removeReactivePlayer, returnToActivePlayer,
 	nextTurn as engineNextTurn, isCritical, getCurrentTickingTime, getScaledPlayerTime, getScaledReactionTime
 } from '$lib/services/timer-engine';
 import { uid } from '$lib/utils/format';
 import { playGainSound, playLossSound, playCriticalSound, playTurnEndSound } from '$lib/utils/sounds';
 import { getDataServiceSync } from '$lib/services/data-service';
+import { logger } from '$lib/services/logger';
 
 /* ── Internal stores ── */
 const _gameState = writable<GameState | null>(null);
@@ -23,6 +33,22 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let _currentUid: string | null = null;
 
 const ACTIVE_GAME_LS_KEY = 'ct_activeGameState';
+const MAX_UNDO = 20;
+
+/* ── Undo history ── */
+interface UndoSnapshot { gameState: GameState; logEntries: LogEntry[]; }
+const _undoStack = writable<UndoSnapshot[]>([]);
+
+function pushUndo(): void {
+	const gs = get(_gameState);
+	const logs = get(_logEntries);
+	if (!gs) return;
+	_undoStack.update((stack) => {
+		const next = [...stack, { gameState: structuredClone(gs), logEntries: structuredClone(logs) }];
+		if (next.length > MAX_UNDO) next.shift();
+		return next;
+	});
+}
 
 /* ── Public derived stores ── */
 export const gameState = derived(_gameState, ($s) => $s);
@@ -35,6 +61,7 @@ export const currentTickingTime = derived(_gameState, ($s) => ($s ? getCurrentTi
 export const isTimerCritical = derived(currentTickingTime, ($t) => isCritical($t));
 export const activeZoneId = derived(_activeZoneId, ($z) => $z);
 export const hasActiveGame = derived(_gameState, ($s) => $s !== null && !$s.isFinished);
+export const canUndo = derived(_undoStack, ($s) => $s.length > 0);
 
 /* ── Setup player shape ── */
 interface SetupPlayer {
@@ -50,6 +77,7 @@ interface SetupPlayer {
 export function initGame(setupPlayers: SetupPlayer[], config: GameConfig, zoneId: string, userUid: string): void {
 	stopTimer();
 	_logEntries.set([]);
+	_undoStack.set([]);
 	clearCommanderDamageMode();
 	_activeZoneId.set(zoneId);
 	_currentUid = userUid;
@@ -63,7 +91,7 @@ export function initGame(setupPlayers: SetupPlayer[], config: GameConfig, zoneId
 		commanderName: sp.commanderName,
 		commanderImageUrl: sp.commanderImageUrl,
 		life: config.maxLife,
-		poolTimeRemaining: tc.poolTimeSeconds,
+		poolTimeRemaining: tc.variant !== 'none' ? tc.poolTimeSeconds : 0,
 		playerTimeRemaining: tc.variant === 'B' ? (tc as TimerConfigB).playerTimeSeconds : 0,
 		reactionTimeRemaining: tc.variant === 'B' ? (tc as TimerConfigB).reactionTimeSeconds : 0,
 		commanderDamageTaken: {},
@@ -72,19 +100,30 @@ export function initGame(setupPlayers: SetupPlayer[], config: GameConfig, zoneId
 		isDead: false
 	}));
 
+	const isNoneVariant = tc.variant === 'none';
 	_gameState.set({
 		config,
 		players,
 		activePlayerIndex: 0,
-		reactivePlayerIndex: null,
+		reactivePlayerIndices: [],
+		eliminationOrder: [],
 		currentRound: 1,
 		turnCount: 0,
-		isRunning: false,
+		isRunning: isNoneVariant, // auto-start: no-timer games skip the IDLE phase
 		isFinished: false,
 		winnerId: null,
-		timerInfo: { phase: 'IDLE', targetPlayerIndex: 0 },
+		timerInfo: isNoneVariant
+			? { phase: 'PLAYER_TIME', targetPlayerIndex: 0 }
+			: { phase: 'IDLE', targetPlayerIndex: 0 },
 		sharedStartTimeRemaining: tc.variant === 'A' ? (tc as TimerConfigA).sharedStartTimeSeconds : 0
 	});
+	const initialState = get(_gameState);
+	if (initialState) {
+		addAnalyticsEventV2(initialState.config.id, 'round_marker', {
+			playerId: initialState.players[initialState.activePlayerIndex]?.playerId,
+			round: initialState.currentRound
+		});
+	}
 	schedulePersist();
 }
 
@@ -105,22 +144,118 @@ export function toggleStartStop(): void {
 	}
 }
 
+/** Start the game with a specific player going first. */
+export function startGameWithPlayer(playerIndex: number): void {
+	const state = get(_gameState);
+	if (!state || state.isFinished || state.timerInfo.phase !== 'IDLE') return;
+	// Set the starting player, then start
+	const withPlayer = structuredClone(state);
+	withPlayer.activePlayerIndex = playerIndex;
+	withPlayer.timerInfo = { ...withPlayer.timerInfo, targetPlayerIndex: playerIndex };
+	_gameState.set(withPlayer);
+	// Now start the game (reads current state)
+	const updated = get(_gameState)!;
+	_gameState.set(startGame(updated));
+	const started = get(_gameState);
+	if (started) {
+		addAnalyticsEventV2(started.config.id, 'turn_start', {
+			playerId: started.players[started.activePlayerIndex]?.playerId,
+			round: started.currentRound
+		});
+	}
+	startTimer();
+}
+
+/** Swap two player seats before the game starts (IDLE only). */
+export function swapPlayerSeats(indexA: number, indexB: number): void {
+	const state = get(_gameState);
+	if (!state || state.isFinished || state.timerInfo.phase !== 'IDLE') return;
+	if (indexA === indexB) return;
+	if (indexA < 0 || indexB < 0 || indexA >= state.players.length || indexB >= state.players.length) return;
+
+	const swapped = structuredClone(state);
+	const tmp = swapped.players[indexA];
+	swapped.players[indexA] = swapped.players[indexB];
+	swapped.players[indexB] = tmp;
+
+	const remapIndex = (idx: number): number => {
+		if (idx === indexA) return indexB;
+		if (idx === indexB) return indexA;
+		return idx;
+	};
+
+	swapped.activePlayerIndex = remapIndex(swapped.activePlayerIndex);
+	swapped.timerInfo = { ...swapped.timerInfo, targetPlayerIndex: remapIndex(swapped.timerInfo.targetPlayerIndex) };
+	swapped.reactivePlayerIndices = (swapped.reactivePlayerIndices ?? []).map(remapIndex);
+
+	_gameState.set(swapped);
+	schedulePersist();
+}
+
 export function advanceNextTurn(): void {
 	const state = get(_gameState);
 	if (!state || state.isFinished) return;
+	pushUndo();
 	playTurnEndSound();
 	_gameState.set(engineNextTurn(state));
+	const updated = get(_gameState);
+	if (updated) {
+		addAnalyticsEventV2(updated.config.id, 'turn_start', {
+			playerId: updated.players[updated.activePlayerIndex]?.playerId,
+			round: updated.currentRound
+		});
+		addAnalyticsEventV2(updated.config.id, 'round_marker', {
+			playerId: updated.players[updated.activePlayerIndex]?.playerId,
+			round: updated.currentRound
+		});
+	}
 }
 
 export function setReactivePlayer(idx: number): void {
 	const state = get(_gameState);
 	if (!state || state.isFinished || idx === state.activePlayerIndex || state.players[idx].isDead) return;
 	_gameState.set(passToReactivePlayer(state, idx));
+	recordReactionEvent(state, idx);
+}
+
+export function toggleReactivePlayer(idx: number): void {
+	const state = get(_gameState);
+	if (!state || state.isFinished || idx === state.activePlayerIndex || state.players[idx].isDead) return;
+	if ((state.reactivePlayerIndices ?? []).includes(idx)) {
+		// Deselect — return to active player
+		_gameState.set(removeReactivePlayer(state, idx));
+		addAnalyticsEventV2(state.config.id, 'reaction_dropped', {
+			playerId: state.players[idx]?.playerId,
+			round: state.currentRound
+		});
+	} else {
+		// Clear any existing reactive player first, then select the new one
+		let s = state;
+		for (const existing of [...(s.reactivePlayerIndices ?? [])]) {
+			addAnalyticsEventV2(state.config.id, 'reaction_dropped', {
+				playerId: s.players[existing]?.playerId,
+				round: s.currentRound
+			});
+			s = removeReactivePlayer(s, existing);
+		}
+		_gameState.set(passToReactivePlayer(s, idx));
+		addAnalyticsEventV2(state.config.id, 'reaction_claimed', {
+			playerId: state.players[idx]?.playerId,
+			round: state.currentRound
+		});
+		recordReactionEvent(state, idx);
+	}
 }
 
 export function returnPriorityToActive(): void {
 	const state = get(_gameState);
 	if (!state || state.isFinished) return;
+	for (const idx of state.reactivePlayerIndices ?? []) {
+		addAnalyticsEventV2(state.config.id, 'reaction_dropped', {
+			playerId: state.players[idx]?.playerId,
+			round: state.currentRound
+		});
+	}
 	_gameState.set(returnToActivePlayer(state));
 }
 
@@ -131,12 +266,46 @@ export function pickRandomOpponent(): void {
 		.map((p, i) => ({ i, dead: p.isDead }))
 		.filter((c) => c.i !== state.activePlayerIndex && !c.dead);
 	if (!cands.length) return;
-	setReactivePlayer(cands[Math.floor(Math.random() * cands.length)].i);
+	const chosenIdx = cands[Math.floor(Math.random() * cands.length)].i;
+	// Clear any existing reactive players first (only 1 allowed)
+	let s = state;
+	for (const existing of [...(s.reactivePlayerIndices ?? [])]) {
+		s = removeReactivePlayer(s, existing);
+	}
+	_gameState.set(passToReactivePlayer(s, chosenIdx));
+	recordReactionEvent(state, chosenIdx);
+}
+
+/** Returns candidate indices for random opponent selection (non-dead, non-active). */
+export function getRandomOpponentCandidates(): number[] {
+	const state = get(_gameState);
+	if (!state || state.isFinished) return [];
+	return state.players
+		.map((p, i) => ({ i, dead: p.isDead }))
+		.filter((c) => c.i !== state.activePlayerIndex && !c.dead)
+		.map((c) => c.i);
+}
+
+/** Clear all reactive players, then set one as reactive. */
+export function clearAndSetReactivePlayer(idx: number): void {
+	const state = get(_gameState);
+	if (!state || state.isFinished || idx === state.activePlayerIndex || state.players[idx].isDead) return;
+	let s = state;
+	for (const existing of [...(s.reactivePlayerIndices ?? [])]) {
+		s = removeReactivePlayer(s, existing);
+	}
+	_gameState.set(passToReactivePlayer(s, idx));
+	recordReactionEvent(state, idx);
 }
 
 /* ── Life ── */
 
 export function changeLife(playerIndex: number, amount: number): void {
+	const currentState = get(_gameState);
+	if (!currentState || currentState.isFinished) return;
+	// Don't allow negative changes on dead players
+	if (currentState.players[playerIndex].isDead && amount < 0) return;
+	pushUndo();
 	_gameState.update((state) => {
 		if (!state || state.isFinished) return state;
 		const next = structuredClone(state);
@@ -144,7 +313,11 @@ export function changeLife(playerIndex: number, amount: number): void {
 		p.life += amount;
 		if (amount > 0) { p.totalLifeGained += amount; playGainSound(); }
 		else { p.totalLifeLost += Math.abs(amount); playLossSound(); }
-		if (p.life <= 0) { p.isDead = true; p.life = 0; }
+		if (p.life <= 0) {
+			p.isDead = true;
+			p.life = 0;
+			markEliminated(next, p.playerId);
+		}
 		return next;
 	});
 	const state = get(_gameState);
@@ -155,25 +328,56 @@ export function changeLife(playerIndex: number, amount: number): void {
 }
 
 export function applyCommanderDamage(srcIdx: number, tgtIdx: number, amount: number): void {
+	const preState = get(_gameState);
+	if (!preState || preState.isFinished) return;
+	const src = preState.players[srcIdx];
+	const tgt = preState.players[tgtIdx];
+	// Dead players can only be changed via revive action.
+	if (tgt.isDead) return;
+	const current = tgt.commanderDamageTaken[src.playerId] ?? 0;
+	let applied = amount;
+	if (amount > 0) {
+		const room = Math.max(0, 21 - current);
+		applied = Math.min(amount, room);
+		if (applied <= 0) return;
+	} else if (amount < 0) {
+		const heal = Math.min(Math.abs(amount), current);
+		if (heal <= 0) return;
+		applied = -heal;
+	} else {
+		return;
+	}
+	pushUndo();
 	_gameState.update((state) => {
 		if (!state || state.isFinished) return state;
 		const next = structuredClone(state);
 		const src = next.players[srcIdx];
 		const tgt = next.players[tgtIdx];
+		if (tgt.isDead) return state;
 		if (!tgt.commanderDamageTaken[src.playerId]) tgt.commanderDamageTaken[src.playerId] = 0;
-		tgt.commanderDamageTaken[src.playerId] += amount;
-		tgt.life -= amount;
-		tgt.totalLifeLost += amount;
-		if (amount > 0) playLossSound();
+		const nextCmd = Math.max(0, Math.min(21, tgt.commanderDamageTaken[src.playerId] + applied));
+		const deltaCmd = nextCmd - tgt.commanderDamageTaken[src.playerId];
+		tgt.commanderDamageTaken[src.playerId] = nextCmd;
+		if (deltaCmd > 0) {
+			tgt.life = Math.max(0, tgt.life - deltaCmd);
+			tgt.totalLifeLost += deltaCmd;
+			playLossSound();
+		} else if (deltaCmd < 0) {
+			const heal = Math.abs(deltaCmd);
+			tgt.life += heal;
+			tgt.totalLifeGained += heal;
+		}
 		if (tgt.commanderDamageTaken[src.playerId] >= 21) tgt.isDead = true;
 		if (tgt.life <= 0) { tgt.isDead = true; tgt.life = 0; }
+		if (tgt.isDead) markEliminated(next, tgt.playerId);
 		return next;
 	});
 	const state = get(_gameState);
 	if (state) {
 		const tgt = state.players[tgtIdx];
 		const src = state.players[srcIdx];
-		addLog(state.config.id, tgt.playerId, tgt.playerName, -amount, 'commander_damage', src.playerId);
+		const logged = Math.max(-21, Math.min(21, -applied));
+		if (logged !== 0) addLog(state.config.id, tgt.playerId, tgt.playerName, logged, 'commander_damage', src.playerId);
 	}
 }
 
@@ -190,6 +394,44 @@ export function clearCommanderDamageMode(): void {
 	_commanderDamageSource.set(null);
 }
 
+/* ── Undo ── */
+
+export function undoLastAction(): void {
+	_undoStack.update((stack) => {
+		if (stack.length === 0) return stack;
+		const next = [...stack];
+		const snapshot = next.pop()!;
+		const current = get(_gameState);
+		// Restore game state values but preserve current isRunning (don't disrupt timer)
+		const preservedRunning = current?.isRunning ?? false;
+		_gameState.set({ ...snapshot.gameState, isRunning: preservedRunning });
+		_logEntries.set(snapshot.logEntries);
+		schedulePersist();
+		return next;
+	});
+}
+
+/* ── Revive ── */
+
+export function revivePlayer(playerIndex: number): void {
+	pushUndo();
+	_gameState.update((state) => {
+		if (!state || state.isFinished) return state;
+		const next = structuredClone(state);
+		const p = next.players[playerIndex];
+		if (!p.isDead) return state;
+		p.isDead = false;
+		p.life = 1;
+		// Full revive reset for player-specific life/commander impacts.
+		p.commanderDamageTaken = {};
+		p.totalLifeGained = 0;
+		p.totalLifeLost = 0;
+		next.eliminationOrder = (next.eliminationOrder ?? []).filter((id) => id !== p.playerId);
+		return next;
+	});
+	schedulePersist();
+}
+
 /* ── Finish / Reset ── */
 
 export function finishGame(winnerId: string): void {
@@ -199,17 +441,26 @@ export function finishGame(winnerId: string): void {
 	_gameState.update((state) => {
 		if (!state) return state;
 		try {
+			const tc = state.config.timerConfig;
+			const podium = computePodium(state, winnerId);
+			const playerTimeConsumed = tc.variant !== 'none'
+				? state.players.map(p => tc.poolTimeSeconds - p.poolTimeRemaining)
+				: undefined;
 			getDataServiceSync().saveGameRecord({
 				playerIds: state.players.map((p) => p.playerId),
 				deckIds: state.players.map((p) => p.deckId),
 				maxLife: state.config.maxLife,
 				timerVariant: state.config.timerConfig.variant,
 				winnerId,
+				secondPlaceId: podium[1] ?? null,
+				thirdPlaceId: podium[2] ?? null,
+				eliminationOrder: [...(state.eliminationOrder ?? [])],
 				createdAt: state.config.createdAt,
 				finishedAt: Date.now(),
-				zoneId
+				zoneId,
+				...(playerTimeConsumed ? { playerTimeConsumed } : {})
 			});
-		} catch (e) { console.warn('Failed to persist game record:', e); }
+		} catch (e) { logger.warn('gameStore.finishGame', 'Failed to persist game record', e); }
 		return { ...state, isFinished: true, isRunning: false, winnerId };
 	});
 	deletePersistedGame();
@@ -220,6 +471,7 @@ export function abandonGame(): void {
 	cancelPersist();
 	_gameState.set(null);
 	_logEntries.set([]);
+	_undoStack.set([]);
 	_activeZoneId.set(null);
 	clearCommanderDamageMode();
 	deletePersistedGame();
@@ -230,9 +482,35 @@ export function resetGame(): void {
 	cancelPersist();
 	_gameState.set(null);
 	_logEntries.set([]);
+	_undoStack.set([]);
 	_activeZoneId.set(null);
 	clearCommanderDamageMode();
 	deletePersistedGame();
+}
+
+/** Ensure a restored GameState has all required fields with safe defaults. */
+function sanitizeGameState(gs: GameState): GameState {
+	return {
+		...gs,
+		players: (gs.players ?? []).map((p) => ({
+			...p,
+			commanderDamageTaken: p.commanderDamageTaken ?? {},
+			poolTimeRemaining: p.poolTimeRemaining ?? 0,
+			playerTimeRemaining: p.playerTimeRemaining ?? 0,
+			reactionTimeRemaining: p.reactionTimeRemaining ?? 0,
+			totalLifeGained: p.totalLifeGained ?? 0,
+			totalLifeLost: p.totalLifeLost ?? 0,
+			isDead: p.isDead ?? false
+		})),
+		reactivePlayerIndices: gs.reactivePlayerIndices ?? [],
+		eliminationOrder: gs.eliminationOrder ?? [],
+		currentRound: gs.currentRound ?? 1,
+		turnCount: gs.turnCount ?? 0,
+		isFinished: gs.isFinished ?? false,
+		winnerId: gs.winnerId ?? null,
+		timerInfo: gs.timerInfo ?? { phase: 'IDLE', targetPlayerIndex: 0 },
+		sharedStartTimeRemaining: gs.sharedStartTimeRemaining ?? 0
+	};
 }
 
 /** Restore active game from localStorage or Firestore. Resumes in PAUSED state. */
@@ -242,8 +520,8 @@ export async function restoreActiveGame(userUid: string): Promise<boolean> {
 		const raw = localStorage.getItem(ACTIVE_GAME_LS_KEY);
 		if (raw) {
 			const data: ActiveGameData = JSON.parse(raw);
-			_gameState.set({ ...data.gameState, isRunning: false });
-			_logEntries.set(data.logEntries);
+			_gameState.set(sanitizeGameState({ ...data.gameState, isRunning: false }));
+			_logEntries.set(data.logEntries ?? []);
 			_activeZoneId.set(data.zoneId);
 			_currentUid = userUid;
 			return true;
@@ -255,14 +533,14 @@ export async function restoreActiveGame(userUid: string): Promise<boolean> {
 		const ds = await getDataService();
 		const data = await ds.getActiveGame(userUid);
 		if (data) {
-			_gameState.set({ ...data.gameState, isRunning: false });
-			_logEntries.set(data.logEntries);
+			_gameState.set(sanitizeGameState({ ...data.gameState, isRunning: false }));
+			_logEntries.set(data.logEntries ?? []);
 			_activeZoneId.set(data.zoneId);
 			_currentUid = userUid;
 			persistToLocalStorage(); // cache locally
 			return true;
 		}
-	} catch (e) { console.warn('Failed to restore from Firestore:', e); }
+	} catch (e) { logger.warn('gameStore.restoreActiveGame', 'Failed to restore active game from Firestore', e); }
 	return false;
 }
 
@@ -296,8 +574,51 @@ function addLog(
 		getDataServiceSync().addLogEntry({
 			gameId, playerId, playerName, value, type, sourcePlayerId, timestamp: entry.timestamp, zoneId
 		});
-	} catch (e) { console.warn('Failed to persist log entry:', e); }
+	} catch (e) { logger.warn('gameStore.addLog', 'Failed to persist log entry', e); }
 	schedulePersist();
+}
+
+function addAnalyticsEventV2(
+	gameId: string,
+	type: AnalyticsEventTypeV2,
+	extra?: { playerId?: string; round?: number }
+): void {
+	const zoneId = get(_activeZoneId);
+	if (!zoneId) return;
+	try {
+		getDataServiceSync().addAnalyticsEventV2({
+			gameId,
+			zoneId,
+			type,
+			timestamp: Date.now(),
+			...(extra ?? {})
+		});
+	} catch (e) {
+		logger.warn('gameStore.addAnalyticsEventV2', 'Failed to persist analytics v2 event', e);
+	}
+}
+
+function recordReactionEvent(state: GameState, playerIndex: number): void {
+	addAnalyticsEventV2(state.config.id, 'reaction', {
+		playerId: state.players[playerIndex]?.playerId,
+		round: state.currentRound
+	});
+}
+
+function markEliminated(state: GameState, playerId: string): void {
+	state.eliminationOrder ??= [];
+	if (!state.eliminationOrder.includes(playerId)) state.eliminationOrder.push(playerId);
+}
+
+function computePodium(state: GameState, winnerId: string): string[] {
+	const eliminatedDesc = [...(state.eliminationOrder ?? [])]
+		.filter((id) => id !== winnerId)
+		.reverse();
+	const aliveOthers = state.players
+		.filter((p) => p.playerId !== winnerId && !eliminatedDesc.includes(p.playerId))
+		.sort((a, b) => b.life - a.life)
+		.map((p) => p.playerId);
+	return [winnerId, ...eliminatedDesc, ...aliveOthers].slice(0, 3);
 }
 
 /* ── Persistence helpers ── */
@@ -325,7 +646,7 @@ function persistToLocalStorage(): void {
 	const data: ActiveGameData = { gameState: state, logEntries: logs, zoneId, updatedAt: Date.now() };
 	try {
 		localStorage.setItem(ACTIVE_GAME_LS_KEY, JSON.stringify(data));
-	} catch (e) { console.warn('Failed to persist game to localStorage:', e); }
+	} catch (e) { logger.warn('gameStore.persistToLocalStorage', 'Failed to persist game to localStorage', e); }
 }
 
 function deletePersistedGame(): void {
@@ -347,6 +668,6 @@ export function syncActiveGameToFirestore(): void {
 	const data: ActiveGameData = { gameState: state, logEntries: logs, zoneId, updatedAt: Date.now() };
 	try {
 		getDataServiceSync().saveActiveGame(_currentUid, data);
-	} catch (e) { console.warn('Failed to sync to Firestore:', e); }
+	} catch (e) { logger.warn('gameStore.syncActiveGameToFirestore', 'Failed to sync active game to Firestore', e); }
 }
 

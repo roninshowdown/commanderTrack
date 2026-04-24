@@ -1,17 +1,37 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 
-	interface Props { message: string; type?: 'success' | 'error'; onclose: () => void; }
-	let { message, type = 'success', onclose }: Props = $props();
+	interface Props {
+		message: string;
+		type?: 'success' | 'error';
+		onclose: () => void;
+		actionLabel?: string;
+		onaction?: () => void;
+		durationMs?: number;
+		autoClose?: boolean;
+	}
+	let {
+		message,
+		type = 'success',
+		onclose,
+		actionLabel,
+		onaction,
+		durationMs = 3000,
+		autoClose = true
+	}: Props = $props();
 
 	onMount(() => {
-		const t = setTimeout(onclose, 3000);
+		if (!autoClose) return;
+		const t = setTimeout(onclose, durationMs);
 		return () => clearTimeout(t);
 	});
 </script>
 
 <div class="toast toast-{type} animate-fade-in" role="alert">
 	<span>{message}</span>
+	{#if actionLabel && onaction}
+		<button class="action-btn" onclick={onaction}>{actionLabel}</button>
+	{/if}
 	<button onclick={onclose}>✕</button>
 </div>
 
@@ -26,6 +46,15 @@
 	}
 	.toast span { flex: 1; }
 	.toast button { color: inherit; font-size: 0.9rem; min-height: 24px; }
+	.action-btn {
+		padding: 4px 10px;
+		border-radius: var(--radius-full);
+		font-size: 0.72rem;
+		font-weight: 800;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		border: 1px solid currentColor;
+	}
 	.toast-success { background: var(--color-success); color: #04151f; }
 	.toast-error { background: var(--color-danger); color: white; }
 </style>

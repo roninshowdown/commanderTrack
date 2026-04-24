@@ -2,10 +2,11 @@
    LocalStorage Data Service
    ============================================ */
 
-import type { Player, Deck, GameRecord, LogEntry, AccountProfile, CommanderZone, ActiveGameData } from '$lib/models/types';
+import type { Player, Deck, GameRecord, LogEntry, AccountProfile, CommanderZone, ActiveGameData, AnalyticsEventV2 } from '$lib/models/types';
 import type { DataService } from './data-service.interface';
 import { uid } from '$lib/utils/format';
 import { isDebugMode } from '$lib/utils/env';
+import { logger } from '$lib/services/logger';
 
 const KEYS = {
 	players: 'ct_players',
@@ -15,19 +16,25 @@ const KEYS = {
 	profiles: 'ct_profiles',
 	zones: 'ct_zones',
 	activeGames: 'ct_activeGames',
+	analyticsEventsV2: 'ct_analytics_events_v2',
 	mockInit: 'ct_mock_initialized'
 } as const;
 
 function load<T>(key: string): T[] {
 	try {
 		return JSON.parse(localStorage.getItem(key) ?? '[]');
-	} catch {
+	} catch (e) {
+		logger.warn('local-storage.load', `Failed to parse localStorage key "${key}"`, e);
 		return [];
 	}
 }
 
 function save<T>(key: string, data: T[]): void {
-	localStorage.setItem(key, JSON.stringify(data));
+	try {
+		localStorage.setItem(key, JSON.stringify(data));
+	} catch (e) {
+		logger.warn('local-storage.save', `Failed to write localStorage key "${key}"`, e);
+	}
 }
 
 export class LocalStorageService implements DataService {
@@ -45,7 +52,7 @@ export class LocalStorageService implements DataService {
 		save(KEYS.games, mock.gameRecords);
 		save(KEYS.logs, mock.logEntries);
 		localStorage.setItem(KEYS.mockInit, 'true');
-		console.log('✅ Mock data seeded', {
+		logger.info('local-storage.seedMockData', 'Mock data seeded', {
 			players: mock.players.length,
 			decks: mock.decks.length,
 			games: mock.gameRecords.length,
@@ -125,6 +132,11 @@ export class LocalStorageService implements DataService {
 			save(KEYS.games, list);
 		}
 	}
+	async deleteGameRecord(id: string): Promise<void> {
+		save(KEYS.games, load<GameRecord>(KEYS.games).filter((g) => g.id !== id));
+		save(KEYS.logs, load<LogEntry>(KEYS.logs).filter((l) => l.gameId !== id));
+		save(KEYS.analyticsEventsV2, load<AnalyticsEventV2>(KEYS.analyticsEventsV2).filter((e) => e.gameId !== id));
+	}
 
 	/* ── Log Entries ── */
 	async addLogEntry(entry: Omit<LogEntry, 'id'>): Promise<string> {
@@ -141,6 +153,25 @@ export class LocalStorageService implements DataService {
 	}
 	async getAllLogEntries(): Promise<LogEntry[]> {
 		return load<LogEntry>(KEYS.logs).sort((a, b) => b.timestamp - a.timestamp);
+	}
+
+	/* ── Analytics V2 Events ── */
+	async addAnalyticsEventV2(entry: Omit<AnalyticsEventV2, 'id'>): Promise<string> {
+		const list = load<AnalyticsEventV2>(KEYS.analyticsEventsV2);
+		const id = uid();
+		list.unshift({ ...entry, id });
+		save(KEYS.analyticsEventsV2, list);
+		return id;
+	}
+	async getAnalyticsEventsV2ForGame(gameId: string): Promise<AnalyticsEventV2[]> {
+		return load<AnalyticsEventV2>(KEYS.analyticsEventsV2)
+			.filter((e) => e.gameId === gameId)
+			.sort((a, b) => b.timestamp - a.timestamp);
+	}
+	async getAnalyticsEventsV2ForZone(zoneId: string): Promise<AnalyticsEventV2[]> {
+		return load<AnalyticsEventV2>(KEYS.analyticsEventsV2)
+			.filter((e) => e.zoneId === zoneId)
+			.sort((a, b) => b.timestamp - a.timestamp);
 	}
 
 	/* ── Account Profiles ── */
@@ -183,6 +214,7 @@ export class LocalStorageService implements DataService {
 		save(KEYS.zones, load<CommanderZone>(KEYS.zones).filter((z) => z.id !== id));
 		save(KEYS.games, load<GameRecord>(KEYS.games).filter((g) => g.zoneId !== id));
 		save(KEYS.logs, load<LogEntry>(KEYS.logs).filter((l) => l.zoneId !== id));
+		save(KEYS.analyticsEventsV2, load<AnalyticsEventV2>(KEYS.analyticsEventsV2).filter((e) => e.zoneId !== id));
 	}
 
 	/* ── Active Game Persistence ── */
@@ -218,11 +250,16 @@ export class LocalStorageService implements DataService {
 function loadMap<T>(key: string): Record<string, T> {
 	try {
 		return JSON.parse(localStorage.getItem(key) ?? '{}');
-	} catch {
+	} catch (e) {
+		logger.warn('local-storage.loadMap', `Failed to parse localStorage map key "${key}"`, e);
 		return {};
 	}
 }
 function saveMap<T>(key: string, data: Record<string, T>): void {
-	localStorage.setItem(key, JSON.stringify(data));
+	try {
+		localStorage.setItem(key, JSON.stringify(data));
+	} catch (e) {
+		logger.warn('local-storage.saveMap', `Failed to write localStorage map key "${key}"`, e);
+	}
 }
 

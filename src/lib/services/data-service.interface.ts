@@ -2,7 +2,7 @@
    Data Service Interface
    ============================================ */
 
-import type { Player, Deck, GameRecord, LogEntry, AccountProfile, CommanderZone, ActiveGameData } from '$lib/models/types';
+import type { Player, Deck, GameRecord, LogEntry, AccountProfile, CommanderZone, ActiveGameData, AnalyticsEventV2 } from '$lib/models/types';
 
 export interface DataService {
 	/* Players (legacy — kept for compatibility, returns all profiles) */
@@ -23,11 +23,17 @@ export interface DataService {
 	saveGameRecord(record: Omit<GameRecord, 'id'>): Promise<string>;
 	getGameRecords(): Promise<GameRecord[]>;
 	updateGameRecord(id: string, data: Partial<Omit<GameRecord, 'id'>>): Promise<void>;
+	deleteGameRecord(id: string): Promise<void>;
 
 	/* Log Entries */
 	addLogEntry(entry: Omit<LogEntry, 'id'>): Promise<string>;
 	getLogEntriesForGame(gameId: string): Promise<LogEntry[]>;
 	getAllLogEntries(): Promise<LogEntry[]>;
+
+	/* Analytics V2 Events (isolated telemetry stream) */
+	addAnalyticsEventV2(entry: Omit<AnalyticsEventV2, 'id'>): Promise<string>;
+	getAnalyticsEventsV2ForGame(gameId: string): Promise<AnalyticsEventV2[]>;
+	getAnalyticsEventsV2ForZone(zoneId: string): Promise<AnalyticsEventV2[]>;
 
 	/* Account Profiles */
 	getAccountProfile(uid: string): Promise<AccountProfile | null>;

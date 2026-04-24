@@ -5,11 +5,12 @@
 import { isDebugMode } from './env';
 
 function logDebugInfo(): void {
-	const keys = ['ct_players', 'ct_decks', 'ct_games', 'ct_logs'] as const;
+	const keys = ['ct_players', 'ct_decks', 'ct_games', 'ct_logs', 'ct_log'] as const;
 	const counts: Record<string, number> = {};
 	for (const k of keys) {
 		try {
-			counts[k] = JSON.parse(localStorage.getItem(k) ?? '[]').length;
+			const parsed = JSON.parse(localStorage.getItem(k) ?? '[]');
+			counts[k] = Array.isArray(parsed) ? parsed.length : Object.keys(parsed ?? {}).length;
 		} catch {
 			counts[k] = 0;
 		}
@@ -18,7 +19,7 @@ function logDebugInfo(): void {
 }
 
 function clearMockData(): void {
-	['ct_players', 'ct_decks', 'ct_games', 'ct_logs', 'ct_mock_initialized'].forEach((k) =>
+	['ct_players', 'ct_decks', 'ct_games', 'ct_logs', 'ct_log', 'ct_mock_initialized'].forEach((k) =>
 		localStorage.removeItem(k)
 	);
 	console.log('Mock data cleared – reload to regenerate.');

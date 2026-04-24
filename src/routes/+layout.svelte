@@ -7,6 +7,7 @@
 	import { goto } from '$app/navigation';
 	import Icon from '$lib/components/ui/Icon.svelte';
 	import { userZones, currentZone, currentZoneId, loadUserZones, switchZone, resetZoneStore } from '$lib/stores/zoneStore';
+	import { getDataService } from '$lib/services/data-service';
 
 	authUser.init();
 
@@ -38,12 +39,29 @@
 	/* Avatar dropdown */
 	let showAvatarDropdown: boolean = $state(false);
 	let showZoneDropdown: boolean = $state(false);
+	let profileImageUrl: string = $state('');
 
 	/* Load zones when user changes */
 	$effect(() => {
 		if (user?.uid) {
 			loadUserZones(user.uid);
 		}
+	});
+
+	$effect(() => {
+		(async () => {
+			if (!user?.uid) {
+				profileImageUrl = '';
+				return;
+			}
+			try {
+				const ds = await getDataService();
+				const profile = await ds.getAccountProfile(user.uid);
+				profileImageUrl = profile?.imageUrl ?? '';
+			} catch {
+				profileImageUrl = '';
+			}
+		})();
 	});
 
 	async function handleGoogleSignIn() {
@@ -73,6 +91,10 @@
 	function handleZoneSwitch(zoneId: string) {
 		switchZone(zoneId);
 		showZoneDropdown = false;
+		// Force full refresh so zone-scoped pages re-run their loading logic.
+		if (typeof window !== 'undefined') {
+			window.location.reload();
+		}
 	}
 
 	function closeDropdowns() {
@@ -81,14 +103,14 @@
 	}
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="app-shell" onclick={closeDropdowns}>
+<!-- svelte-ignore a11y_click_events_have_key_events -->
+<div class="app-shell" class:force-rotated={isGamePage} role="presentation" onclick={closeDropdowns}>
 	{#if !isAuthenticated}
 		<!-- ── Login Screen ── -->
 		<div class="login-shell">
 			<div class="login-card animate-fade-in">
 				<div class="login-hero">
-					<div class="logo-ring"><Icon name="swords" size={36} color="var(--color-primary)" /></div>
+					<div class="logo-ring"><img src="/Commander_track_icon.png" alt="Commander Track" class="login-logo" /></div>
 					<h1>Commander Track</h1>
 					<p class="login-sub">Please sign in to continue</p>
 				</div>
@@ -133,8 +155,8 @@
 							{zone.name}
 						</button>
 						{#if showZoneDropdown}
-							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-							<div class="dropdown zone-dropdown" onclick={(e) => e.stopPropagation()}>
+							<!-- svelte-ignore a11y_click_events_have_key_events -->
+							<div class="dropdown zone-dropdown" role="presentation" onclick={(e) => e.stopPropagation()}>
 								{#each myZones as z (z.id)}
 									<button class="dropdown-item" class:active={z.id === curZoneId} onclick={() => handleZoneSwitch(z.id)}>
 										{z.name}
@@ -153,15 +175,15 @@
 				<!-- Avatar -->
 				<div class="avatar-wrap">
 					<button class="avatar-btn" onclick={(e) => { e.stopPropagation(); showAvatarDropdown = !showAvatarDropdown; }}>
-						{#if user?.photoURL}
-							<img src={user.photoURL} alt="" class="avatar-img" />
+						{#if profileImageUrl || user?.photoURL}
+							<img src={profileImageUrl || user?.photoURL} alt="" class="avatar-img" />
 						{:else}
 							<Icon name="user" size={20} color="var(--color-text-muted)" />
 						{/if}
 					</button>
 					{#if showAvatarDropdown}
-						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-						<div class="dropdown avatar-dropdown" onclick={(e) => e.stopPropagation()}>
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div class="dropdown avatar-dropdown" role="presentation" onclick={(e) => e.stopPropagation()}>
 						<div class="dropdown-header">
 							{user?.email ?? user?.displayName ?? 'Player'}
 						</div>
@@ -194,6 +216,7 @@
 	.login-hero h1 { font-size: 1.3rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
 	.login-sub { font-size: 0.8rem; color: var(--color-text-muted); }
 	.logo-ring { width: 64px; height: 64px; border-radius: var(--radius-xl); border: 2px solid var(--neon-red); display: flex; align-items: center; justify-content: center; box-shadow: var(--glow-primary); background: var(--color-primary-dim); animation: neon-flicker 6s infinite; }
+	.login-logo { width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-lg); }
 	.login-btn { width: 100%; padding: var(--space-sm) var(--space-md); border-radius: var(--radius-lg); font-weight: 800; font-size: 0.8rem; letter-spacing: 0.04em; display: flex; justify-content: center; align-items: center; gap: 8px; transition: all var(--transition-fast); border: 1px solid transparent; }
 	.login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 	.login-btn.primary { background: var(--color-primary); color: white; border-color: var(--color-primary-light); }
@@ -238,11 +261,41 @@
 	.app-main.has-header { padding-top: var(--space-sm); }
 	.app-main.game-page { max-width: 100%; }
 
-	/* ── Landscape game mode: hide top bar ── */
-	@media (orientation: landscape) and (max-height: 500px) {
-		.top-bar.landscape-hide { display: none; }
-		.app-main.game-page { padding: var(--space-xs); padding-bottom: env(safe-area-inset-bottom, 0px); }
+	/* ── Mobile: rotate only in game mode ── */
+	@media (max-width: 768px) {
+		.app-shell.force-rotated {
+			width: 100dvh;
+			height: 100dvw;
+			transform: rotate(90deg);
+			transform-origin: left top;
+			position: fixed;
+			top: 0;
+			left: 100dvw;
+			overflow: hidden;
+			min-height: unset;
+			flex-direction: column;
+		}
+		.app-shell.force-rotated .top-bar {
+			padding-top: var(--space-sm);
+			flex-shrink: 0;
+		}
+		.app-shell.force-rotated .top-bar.landscape-hide { display: none; }
+		.app-shell.force-rotated .app-main {
+			max-width: 100%;
+			padding: var(--space-sm);
+			padding-bottom: env(safe-area-inset-right, 0px);
+			overflow-y: auto;
+			overflow-x: hidden;
+			-webkit-overflow-scrolling: touch;
+		}
+		.app-shell.force-rotated .app-main.game-page {
+			padding: 2px;
+			padding-bottom: env(safe-area-inset-right, 0px);
+			overflow: hidden;
+			height: 100%;
+			display: flex;
+			flex-direction: column;
+		}
 	}
 </style>
-
 

@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import type { Player, Deck, GameConfig, TimerConfigA, TimerConfigB, TimerVariant } from '$lib/models/types';
+	import type { Player, Deck, GameConfig, TimerConfigA, TimerConfigB, TimerConfigNone, GameRecord } from '$lib/models/types';
 	import { initGame, hasActiveGame, abandonGame } from '$lib/stores/gameStore';
 	import { currentZone } from '$lib/stores/zoneStore';
 	import { getPlayersInZone, getDecksInZone } from '$lib/stores/zoneStore';
+	import { getDataService } from '$lib/services/data-service';
 	import { authUser } from '$lib/firebase/auth';
 	import { uid } from '$lib/utils/format';
 	import Button from '$lib/components/ui/Button.svelte';
@@ -17,20 +18,24 @@
 
 	let players: Player[] = $state([]);
 	let decks: Deck[] = $state([]);
+	let gameRecords: GameRecord[] = $state([]);
 	let loading: boolean = $state(true);
 
 	let playerCount: number = $state(4);
 	let selectedPlayers: (string | null)[] = $state([null, null, null, null, null, null]);
 	let selectedDecks: (string | null)[] = $state([null, null, null, null, null, null]);
 	let maxLife: number = $state(40);
-	let timerVariant: TimerVariant = $state('B');
 
-	/* Variant A */
+	/* Timer mode */
+	let timerEnabled: boolean = $state(true);
+	let timerType: 'A' | 'B' = $state('B'); // B = Progressive (default)
+
+	/* Variant A — Simple */
 	let poolTimeMinA: number = $state(30);
 	let sharedStartMin: number = $state(10);
 
-	/* Variant B */
-	let poolTimeMinB: number = $state(30);
+	/* Variant B — Progressive */
+	let poolTimeMinB: number = $state(10);
 	let playerTimeMin: number = $state(2);
 	let reactionTimeMin: number = $state(1);
 	let scalePlayer: number = $state(10);
@@ -41,13 +46,55 @@
 	onMount(async () => {
 		if (!zone) { loading = false; return; }
 		try {
+			const ds = await getDataService();
 			[players, decks] = await Promise.all([
 				getPlayersInZone(zone.id),
 				getDecksInZone(zone.id)
 			]);
+			// Game records for deck prefill — non-critical, fail silently
+			try {
+				gameRecords = await ds.getGameRecordsForZone(zone.id);
+			} catch (e) {
+				console.warn('[setup] Failed to load game records for deck prefill:', e);
+				gameRecords = [];
+			}
 		} catch (e: any) { toast = { message: `Load failed: ${e?.message ?? e}`, type: 'error' }; }
 		loading = false;
 	});
+
+	/** Auto-fill player & deck slots with available zone members */
+	function prefillSlots() {
+		const newSelected: (string | null)[] = [null, null, null, null, null, null];
+		const newDecks: (string | null)[] = [null, null, null, null, null, null];
+		for (let i = 0; i < playerCount && i < players.length; i++) {
+			const player = players[i];
+			newSelected[i] = player.id;
+			const validDecks = decks.filter((d) => d.playerId === player.id);
+			const mostPlayed = getMostPlayedDeckId(player.id);
+			newDecks[i] = (mostPlayed && validDecks.find((d) => d.id === mostPlayed))
+				? mostPlayed
+				: (validDecks.length === 1 ? validDecks[0].id : null);
+		}
+		selectedPlayers = newSelected;
+		selectedDecks = newDecks;
+	}
+
+	/* Re-run prefill when data finishes loading or playerCount changes */
+	$effect(() => {
+		if (!loading && players.length) {
+			prefillSlots();
+		}
+	});
+
+	function getMostPlayedDeckId(playerId: string): string | null {
+		const counts: Record<string, number> = {};
+		for (const r of gameRecords) {
+			const idx = r.playerIds.indexOf(playerId);
+			if (idx !== -1 && r.deckIds[idx]) counts[r.deckIds[idx]] = (counts[r.deckIds[idx]] ?? 0) + 1;
+		}
+		if (!Object.keys(counts).length) return null;
+		return Object.entries(counts).sort(([, a], [, b]) => b - a)[0][0];
+	}
 
 	function getAvailablePlayers(slot: number): Player[] {
 		const used = selectedPlayers.filter((p, i) => p && i !== slot);
@@ -56,7 +103,15 @@
 
 	function onPlayerSelect(slot: number, id: string) {
 		selectedPlayers[slot] = id || null;
-		selectedDecks[slot] = null;
+		if (id) {
+			const validDecks = decks.filter((d) => d.playerId === id);
+			const mostPlayed = getMostPlayedDeckId(id);
+			const prefill = mostPlayed && validDecks.find((d) => d.id === mostPlayed) ? mostPlayed : null;
+			// Prefill most played, or auto-select if only one deck available
+			selectedDecks[slot] = prefill ?? (validDecks.length === 1 ? validDecks[0].id : null);
+		} else {
+			selectedDecks[slot] = null;
+		}
 	}
 
 	function getDecksForPlayer(slot: number): Deck[] {
@@ -88,9 +143,15 @@
 			const d = decks.find((x) => x.id === did)!;
 			setupPlayers.push({ playerId: pid, deckId: did, playerName: p.name, commanderName: d.commanderName, commanderImageUrl: d.commanderImageUrl });
 		}
-		const timerConfig = timerVariant === 'A'
-			? { variant: 'A' as const, poolTimeSeconds: poolTimeMinA * 60, sharedStartTimeSeconds: sharedStartMin * 60 } satisfies TimerConfigA
-			: { variant: 'B' as const, poolTimeSeconds: poolTimeMinB * 60, playerTimeSeconds: playerTimeMin * 60, reactionTimeSeconds: reactionTimeMin * 60, scaleFactorPlayerTimeSeconds: scalePlayer, scaleFactorReactionTimeSeconds: scaleReaction } satisfies TimerConfigB;
+
+		let timerConfig: TimerConfigA | TimerConfigB | TimerConfigNone;
+		if (!timerEnabled) {
+			timerConfig = { variant: 'none' } satisfies TimerConfigNone;
+		} else if (timerType === 'A') {
+			timerConfig = { variant: 'A', poolTimeSeconds: poolTimeMinA * 60, sharedStartTimeSeconds: sharedStartMin * 60, enableReaction: true } satisfies TimerConfigA;
+		} else {
+			timerConfig = { variant: 'B', poolTimeSeconds: poolTimeMinB * 60, playerTimeSeconds: playerTimeMin * 60, reactionTimeSeconds: reactionTimeMin * 60, scaleFactorPlayerTimeSeconds: scalePlayer, scaleFactorReactionTimeSeconds: scaleReaction } satisfies TimerConfigB;
+		}
 
 		const config: GameConfig = { id: uid(), maxLife, timerConfig, createdAt: Date.now() };
 		initGame(setupPlayers, config, zone.id, user?.uid ?? '');
@@ -113,47 +174,111 @@
 		</div>
 	{:else if loading}<div class="loading">Loading…</div>
 	{:else}
-		<section class="sec"><h2>Players</h2>
-			<div class="count-row">{#each [2,3,4,5,6] as n}<button class="cnt" class:active={playerCount===n} onclick={()=>playerCount=n}>{n}</button>{/each}</div>
-		</section>
-
-		<section class="sec"><h2>Select Players & Decks</h2>
-			<div class="slots">{#each Array(playerCount) as _,i}
-				<div class="slot"><span class="slot-lbl">Slot {i+1}</span>
-					<select value={selectedPlayers[i]??''} onchange={(e)=>onPlayerSelect(i,(e.target as HTMLSelectElement).value)}>
-						<option value="">Select player…</option>
-						{#each getAvailablePlayers(i) as p}<option value={p.id}>{p.name}</option>{/each}
-					</select>
-					<select value={selectedDecks[i]??''} onchange={(e)=>selectedDecks[i]=(e.target as HTMLSelectElement).value} disabled={!selectedPlayers[i]}>
-						<option value="">Select deck…</option>
-						{#each getDecksForPlayer(i) as d}<option value={d.id}>{d.commanderName}</option>{/each}
-					</select>
-				</div>
-			{/each}</div>
-		</section>
-
-		<section class="sec"><h2>Starting Life</h2>
-			<div class="count-row">{#each [20,25,30,40,50] as l}<button class="cnt" class:active={maxLife===l} onclick={()=>maxLife=l}>{l}</button>{/each}</div>
-		</section>
-
-		<section class="sec"><h2>Timer Variant</h2>
-			<div class="vtabs">
-				<button class="vtab" class:active={timerVariant==='A'} onclick={()=>timerVariant='A'}><strong>Variant A</strong><span>Shared start, no reaction</span></button>
-				<button class="vtab" class:active={timerVariant==='B'} onclick={()=>timerVariant='B'}><strong>Variant B</strong><span>Player + reaction + scaling</span></button>
+		<!-- Players -->
+		<section class="sec">
+			<h2>Players</h2>
+			<div class="count-row">
+				{#each [2,3,4,5,6] as n}
+					<button class="cnt" class:active={playerCount===n} onclick={()=>playerCount=n}>{n}</button>
+				{/each}
 			</div>
-			{#if timerVariant==='A'}
-				<div class="fields"><div class="field"><label for="s-pa">Pool Time (min)</label><input id="s-pa" type="number" bind:value={poolTimeMinA} min="1" max="120"/></div>
-				<div class="field"><label for="s-ss">Shared Start (min)</label><input id="s-ss" type="number" bind:value={sharedStartMin} min="1" max="60"/></div></div>
-			{:else}
-				<div class="fields"><div class="field"><label for="s-pb">Pool Time (min)</label><input id="s-pb" type="number" bind:value={poolTimeMinB} min="1" max="120"/></div>
-				<div class="field"><label for="s-pt">Player Time (min)</label><input id="s-pt" type="number" bind:value={playerTimeMin} min="0.5" max="30" step="0.5"/></div>
-				<div class="field"><label for="s-rt">Reaction (min)</label><input id="s-rt" type="number" bind:value={reactionTimeMin} min="0.5" max="30" step="0.5"/></div>
-				<div class="field"><label for="s-sp">Scale Player (s)</label><input id="s-sp" type="number" bind:value={scalePlayer} min="0" max="60"/></div>
-				<div class="field"><label for="s-sr">Scale React (s)</label><input id="s-sr" type="number" bind:value={scaleReaction} min="0" max="60"/></div></div>
+		</section>
+
+		<!-- Player & Deck slots -->
+		<section class="sec">
+			<h2>Select Players &amp; Decks</h2>
+			<div class="slots">
+				{#each Array(playerCount) as _,i}
+					<div class="slot">
+						<span class="slot-lbl">Slot {i+1}</span>
+						<select value={selectedPlayers[i]??''} onchange={(e)=>onPlayerSelect(i,(e.target as HTMLSelectElement).value)}>
+							<option value="">Select player…</option>
+							{#each getAvailablePlayers(i) as p}<option value={p.id}>{p.name}</option>{/each}
+						</select>
+						<select value={selectedDecks[i]??''} onchange={(e)=>selectedDecks[i]=(e.target as HTMLSelectElement).value} disabled={!selectedPlayers[i]}>
+							<option value="">Select deck…</option>
+							{#each getDecksForPlayer(i) as d}<option value={d.id}>{d.commanderName}</option>{/each}
+						</select>
+					</div>
+				{/each}
+			</div>
+		</section>
+
+		<!-- Starting Life -->
+		<section class="sec">
+			<h2>Starting Life</h2>
+			<div class="count-row">
+				{#each [20,40,60,80] as l}
+					<button class="cnt" class:active={maxLife===l} onclick={()=>maxLife=l}>{l}</button>
+				{/each}
+			</div>
+		</section>
+
+		<!-- Timer -->
+		<section class="sec">
+			<div class="timer-header">
+				<h2>Timer</h2>
+				<label class="toggle-wrap">
+					<span class="toggle-lbl">{timerEnabled ? 'Enabled' : 'Disabled'}</span>
+					<button class="toggle" class:on={timerEnabled} onclick={()=>timerEnabled=!timerEnabled} aria-label="Toggle timer">
+						<span class="knob"></span>
+					</button>
+				</label>
+			</div>
+
+			{#if timerEnabled}
+				<div class="vtabs">
+					<button class="vtab" class:active={timerType==='B'} onclick={()=>timerType='B'}>
+						<strong>Progressive</strong><span>Turn time + reaction + scaling</span>
+					</button>
+					<button class="vtab" class:active={timerType==='A'} onclick={()=>timerType='A'}>
+						<strong>Simple</strong><span>Shared start + pool time</span>
+					</button>
+				</div>
+
+				{#if timerType==='A'}
+					<div class="fields">
+						<div class="field">
+							<label for="s-pa">Player Pool Time (min)</label>
+							<input id="s-pa" type="number" bind:value={poolTimeMinA} min="1" max="120"/>
+						</div>
+						<div class="field">
+							<label for="s-ss">Shared Start Time (min)</label>
+							<input id="s-ss" type="number" bind:value={sharedStartMin} min="1" max="60"/>
+						</div>
+					</div>
+				{:else}
+					<div class="fields">
+						<div class="field">
+							<label for="s-pb">Player Pool Time (min)</label>
+							<input id="s-pb" type="number" bind:value={poolTimeMinB} min="1" max="120"/>
+						</div>
+						<div class="field">
+							<label for="s-pt">Player Turn Time (min)</label>
+							<input id="s-pt" type="number" bind:value={playerTimeMin} min="0.5" max="30" step="0.5"/>
+						</div>
+						<div class="field">
+							<label for="s-rt">Reaction Time (min)</label>
+							<input id="s-rt" type="number" bind:value={reactionTimeMin} min="0.5" max="30" step="0.5"/>
+						</div>
+						<div class="field">
+							<label for="s-sp">Increase Player Time Per Round (s)</label>
+							<input id="s-sp" type="number" bind:value={scalePlayer} min="0" max="60"/>
+						</div>
+						<div class="field">
+							<label for="s-sr">Increase React Time Per Round (s)</label>
+							<input id="s-sr" type="number" bind:value={scaleReaction} min="0" max="60"/>
+						</div>
+					</div>
+				{/if}
 			{/if}
 		</section>
 
-		<section class="sec start"><Button variant="primary" size="lg" fullWidth onclick={startGame_}>{#snippet children()}<Icon name="play" size={16}/> Start Game{/snippet}</Button></section>
+		<section class="sec start">
+			<Button variant="primary" size="lg" fullWidth onclick={startGame_}>
+				{#snippet children()}<Icon name="play" size={16}/> Start Game{/snippet}
+			</Button>
+		</section>
 	{/if}
 </div>
 
@@ -171,18 +296,31 @@
 	.slot{display:flex;gap:var(--space-sm);align-items:center;flex-wrap:wrap}
 	.slot-lbl{width:100%;font-size:.7rem;font-weight:700;color:var(--color-text-muted);letter-spacing:.06em;text-transform:uppercase}
 	.slot select{flex:1;min-width:0;min-height:44px}
+
+	/* Timer section */
+	.timer-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-md)}
+	.timer-header h2{margin-bottom:0}
+	.toggle-wrap{display:flex;align-items:center;gap:var(--space-xs);cursor:pointer}
+	.toggle-lbl{font-size:.7rem;font-weight:700;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:.04em}
+	.toggle{width:44px;height:24px;border-radius:12px;background:var(--color-surface-elevated);border:1px solid var(--color-surface-elevated);position:relative;transition:all var(--transition-fast);min-height:unset;padding:0}
+	.toggle.on{background:var(--color-primary);border-color:var(--color-primary-light)}
+	.knob{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:white;transition:transform var(--transition-fast)}
+	.toggle.on .knob{transform:translateX(20px)}
+
 	.vtabs{display:flex;gap:var(--space-sm);margin-bottom:var(--space-md)}
 	.vtab{flex:1;padding:var(--space-md);border-radius:var(--radius-lg);background:var(--color-surface);border:1px solid var(--color-surface-elevated);text-align:left;display:flex;flex-direction:column;gap:4px;transition:all var(--transition-fast)}
 	.vtab.active{border-color:var(--neon-red);background:var(--color-primary-dim);box-shadow:var(--glow-primary)}
 	.vtab strong{font-size:.85rem;letter-spacing:.04em}.vtab span{font-size:.65rem;color:var(--color-text-muted)}
+
 	.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--space-md)}
 	.field{display:flex;flex-direction:column;gap:var(--space-xs)}
 	.field label{font-size:.7rem;font-weight:700;color:var(--color-text-muted);letter-spacing:.04em;text-transform:uppercase}
+
+
 	.start{margin-top:var(--space-2xl)}
 	.loading{text-align:center;padding:var(--space-2xl);color:var(--color-text-muted)}
 	.active-game-warning{display:flex;flex-direction:column;align-items:center;gap:var(--space-md);padding:var(--space-xl);text-align:center;background:rgba(255,171,0,.08);border:1px solid rgba(255,171,0,.3);border-radius:var(--radius-lg)}
 	.active-game-warning p{color:var(--color-text-muted);font-size:.85rem}
 	.warning-actions{display:flex;gap:var(--space-sm)}
 </style>
-
 

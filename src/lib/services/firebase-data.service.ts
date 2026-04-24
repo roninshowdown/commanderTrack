@@ -8,14 +8,18 @@ import {
 	type DocumentData, type Firestore
 } from 'firebase/firestore';
 import { ensureFirebaseDb } from '$lib/firebase/config';
-import type { Player, Deck, GameRecord, LogEntry, AccountProfile, CommanderZone, ActiveGameData } from '$lib/models/types';
+import type { Player, Deck, GameRecord, LogEntry, AccountProfile, CommanderZone, ActiveGameData, AnalyticsEventV2 } from '$lib/models/types';
 import type { DataService } from './data-service.interface';
+import { logger } from '$lib/services/logger';
 
 function withTimeout<T>(p: Promise<T>, ms = 8000, label = 'Firestore'): Promise<T> {
 	return Promise.race([
 		p,
 		new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`${label} timed out (${ms}ms)`)), ms))
-	]);
+	]).catch((e) => {
+		logger.warn('firebase-data.withTimeout', `${label} operation failed`, e);
+		throw e;
+	});
 }
 
 export class FirebaseDataService implements DataService {
@@ -87,6 +91,16 @@ export class FirebaseDataService implements DataService {
 	async updateGameRecord(id: string, data: Partial<Omit<GameRecord, 'id'>>): Promise<void> {
 		await withTimeout(updateDoc(doc(await this.db(), 'games', id), data as DocumentData));
 	}
+	async deleteGameRecord(id: string): Promise<void> {
+		const db = await this.db();
+		const logsQ = query(collection(db, 'gameLogs'), where('gameId', '==', id));
+		const logsSnap = await withTimeout(getDocs(logsQ));
+		for (const l of logsSnap.docs) await withTimeout(deleteDoc(l.ref));
+		const eventsQ = query(collection(db, 'analyticsEventsV2'), where('gameId', '==', id));
+		const eventsSnap = await withTimeout(getDocs(eventsQ));
+		for (const e of eventsSnap.docs) await withTimeout(deleteDoc(e.ref));
+		await withTimeout(deleteDoc(doc(db, 'games', id)));
+	}
 
 	/* ── Log Entries ── */
 	async addLogEntry(entry: Omit<LogEntry, 'id'>): Promise<string> {
@@ -102,6 +116,26 @@ export class FirebaseDataService implements DataService {
 		const q = query(await this.col('gameLogs'), orderBy('timestamp', 'desc'));
 		const snap = await withTimeout(getDocs(q));
 		return snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LogEntry);
+	}
+
+	/* ── Analytics V2 Events ── */
+	async addAnalyticsEventV2(entry: Omit<AnalyticsEventV2, 'id'>): Promise<string> {
+		const r = await withTimeout(addDoc(await this.col('analyticsEventsV2'), entry));
+		return r.id;
+	}
+	async getAnalyticsEventsV2ForGame(gameId: string): Promise<AnalyticsEventV2[]> {
+		const q = query(await this.col('analyticsEventsV2'), where('gameId', '==', gameId));
+		const snap = await withTimeout(getDocs(q));
+		return snap.docs
+			.map((d) => ({ id: d.id, ...d.data() }) as AnalyticsEventV2)
+			.sort((a, b) => b.timestamp - a.timestamp);
+	}
+	async getAnalyticsEventsV2ForZone(zoneId: string): Promise<AnalyticsEventV2[]> {
+		const q = query(await this.col('analyticsEventsV2'), where('zoneId', '==', zoneId));
+		const snap = await withTimeout(getDocs(q));
+		return snap.docs
+			.map((d) => ({ id: d.id, ...d.data() }) as AnalyticsEventV2)
+			.sort((a, b) => b.timestamp - a.timestamp);
 	}
 
 	/* ── Account Profiles ── */
@@ -142,8 +176,11 @@ export class FirebaseDataService implements DataService {
 		for (const g of gamesSnap.docs) {
 			// Delete logs for each game
 			const logsQ = query(collection(db, 'gameLogs'), where('gameId', '==', g.id));
-			const logsSnap = await getDocs(logsQ);
+			const logsSnap = await withTimeout(getDocs(logsQ));
 			for (const l of logsSnap.docs) await deleteDoc(l.ref);
+			const eventsQ = query(collection(db, 'analyticsEventsV2'), where('gameId', '==', g.id));
+			const eventsSnap = await withTimeout(getDocs(eventsQ));
+			for (const e of eventsSnap.docs) await deleteDoc(e.ref);
 			await deleteDoc(g.ref);
 		}
 		await deleteDoc(doc(db, 'zones', id));

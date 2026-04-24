@@ -5,6 +5,7 @@
 import { writable, type Readable } from 'svelte/store';
 import { isDebugMode } from '$lib/utils/env';
 import { isFirebaseConfigured } from '$lib/services/data-service';
+import { logger } from '$lib/services/logger';
 
 /* ─── Local dev user ─── */
 
@@ -48,7 +49,7 @@ function createAuthStore(): Readable<AuthUser | null> & {
 			}
 
 			if (!isFirebaseConfigured()) {
-				console.error('[auth] Firebase config missing — auth required in production.');
+				logger.error('auth.init', 'Firebase config missing while auth is required');
 				set(null);
 				return;
 			}
@@ -65,7 +66,7 @@ function createAuthStore(): Readable<AuthUser | null> & {
 						if (user) ensureProfile(user.uid, user.photoURL);
 					});
 				} catch (e) {
-					console.error('[auth] Failed to initialize Firebase Auth:', e);
+									logger.error('auth.init', 'Failed to initialize Firebase Auth', e);
 					set(null);
 				}
 			})();
@@ -81,9 +82,10 @@ async function ensureProfile(uid: string, photoURL: string | null): Promise<void
 		const existing = await ds.getAccountProfile(uid);
 		if (!existing) {
 			await ds.upsertAccountProfile(uid, { imageUrl: photoURL ?? undefined });
+			logger.info('auth.ensureProfile', 'Created profile on first login', { uid });
 		}
 	} catch (e) {
-		console.warn('[auth] Failed to ensure profile:', e);
+		logger.warn('auth.ensureProfile', 'Failed to ensure profile', e);
 	}
 }
 

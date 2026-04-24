@@ -1,8 +1,8 @@
-<script lang="ts">
+ A<script lang="ts">
 	import type { Deck, Player, MtgColor } from '$lib/models/types';
 	import Button from '$lib/components/ui/Button.svelte';
 	import Icon from '$lib/components/ui/Icon.svelte';
-	import ColorPip from '$lib/components/ui/ColorPip.svelte';
+	import ManaIcon from '$lib/components/ui/ManaIcon.svelte';
 	import { searchCommander, autocompleteCardName } from '$lib/services/scryfall';
 
 	interface Props {
@@ -12,19 +12,14 @@
 	}
 	let { deck = null, players, onsave, oncancel, disabled = false }: Props = $props();
 
-	const initialPlayerId = deck?.playerId ?? (players[0]?.id ?? '');
-	const initialCmdName = deck?.commanderName ?? '';
-	const initialCmdImage = deck?.commanderImageUrl ?? '';
-	const initialColors = deck?.colors ?? [];
-
-	let playerId: string = $state(initialPlayerId);
-	let commanderName: string = $state(initialCmdName);
-	let commanderImageUrl: string = $state(initialCmdImage);
-	let colors: MtgColor[] = $state(initialColors);
+	/* svelte-ignore state_referenced_locally — form fields intentionally capture initial prop values */
+	let playerId: string = $state(deck?.playerId ?? (players[0]?.id ?? ''));
+	let commanderName: string = $state(deck?.commanderName ?? '');
+	let commanderImageUrl: string = $state(deck?.commanderImageUrl ?? '');
+	let colors: MtgColor[] = $state(deck?.colors ?? []);
 	let searching: boolean = $state(false);
 	let suggestions: string[] = $state([]);
 	let showSuggestions: boolean = $state(false);
-	const allColors: MtgColor[] = ['white','blue','black','red','green'];
 
 	async function searchCard() {
 		if (!commanderName.trim()) return;
@@ -38,7 +33,6 @@
 		else showSuggestions = false;
 	}
 	function selectSuggestion(n: string) { commanderName = n; showSuggestions = false; searchCard(); }
-	function toggleColor(c: MtgColor) { colors = colors.includes(c) ? colors.filter(x=>x!==c) : [...colors, c]; }
 	function handleSubmit() {
 		if (!commanderName.trim() || !playerId || disabled) return;
 		onsave({ playerId, commanderName: commanderName.trim(), commanderImageUrl, colors });
@@ -77,12 +71,12 @@
 	</div>
 
 	<div class="field">
-		<span class="field-label">Colors</span>
+		<span class="field-label">Colors <span class="color-hint">(derived from commander)</span></span>
 		<div class="color-row">
-			{#each allColors as c}
-				<button type="button" class="color-pill" class:active={colors.includes(c)} onclick={() => toggleColor(c)}>
-					<ColorPip color={c} size={28} active={colors.includes(c)} />
-				</button>
+			{#each (['white','blue','black','red','green'] as const) as c}
+				<span class="color-pip-wrap" class:inactive={!colors.includes(c)}>
+					<ManaIcon color={c} size={36} />
+				</span>
 			{/each}
 		</div>
 	</div>
@@ -111,8 +105,9 @@
 	.suggestions button { display: block; width: 100%; text-align: left; padding: var(--space-sm) var(--space-md); font-size: 0.85rem; }
 	.suggestions button:hover { background: var(--color-surface-hover); }
 	.color-row { display: flex; gap: var(--space-sm); }
-	.color-pill { padding: 4px; border-radius: var(--radius-full); border: 2px solid transparent; }
-	.color-pill.active { border-color: var(--color-secondary); }
+	.color-pip-wrap { transition: opacity 0.2s; }
+	.color-pip-wrap.inactive { opacity: 0.2; filter: grayscale(0.8); }
+	.color-hint { font-size: 0.7rem; color: var(--color-text-muted); font-weight: 400; }
 	.preview { width: 100%; max-width: 200px; border-radius: var(--radius-md); margin-top: var(--space-sm); }
 	.actions { display: flex; justify-content: flex-end; gap: var(--space-sm); margin-top: var(--space-md); }
 </style>
