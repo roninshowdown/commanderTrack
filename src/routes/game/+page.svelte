@@ -653,7 +653,7 @@
 							minimalMode={startPhase !== 'playing'}
 							selectedToMove={moveCandidateIndex === i && isIdle}
 							seatPosition={seatPositionForIndex(i)}
-							highlightGold={(moveCandidateIndex === i && isIdle) || (randomPickActive && randomPickIdx === i)}
+							highlightGold={(moveCandidateIndex === i && isIdle) || (randomPickActive && randomPickIdx === i) || (startPhase === 'roulette' && rouletteIdx === i)}
 							onlifechange={(amt: number)=>handleLifeChange(i,amt)}
 							onrevive={() => requestRevive(i)}
 							onclick={()=>handleTileClick(i)} />
@@ -814,6 +814,13 @@
 	.battlefield.bf-3{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
 	.battlefield.bf-4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
 	.battlefield.bf-5{grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr}
+	/* Smaller wheel for sparser layouts so life/buttons stay visible */
+	.battlefield.bf-2 .wheel-core,
+	.battlefield.bf-3 .wheel-core{width:160px;height:160px;border-width:6px}
+	.battlefield.bf-2 .wheel-time,
+	.battlefield.bf-3 .wheel-time{font-size:2.7rem}
+	.battlefield.bf-2 .wheel-btn,
+	.battlefield.bf-3 .wheel-btn{width:74px;min-height:74px}
 	.slot{min-width:0;min-height:0;position:relative}
 	.slot :global(.tile){height:100%;min-height:unset}
 	.tile-toast{position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:8px;background:rgba(8,8,13,.92);border:2px solid var(--color-warning);color:#fff;padding:6px 10px;border-radius:var(--radius-full);font-size:.72rem;font-weight:800;box-shadow:0 0 16px rgba(255,171,0,.24)}
@@ -890,6 +897,12 @@
 		.game-page { padding: 0; gap: 2px; flex: 1; overflow: hidden; }
 		.battlefield { gap: 3px; }
 		.wheel-core { width: 172px; height: 172px; }
+		.battlefield.bf-2 .wheel-core,
+		.battlefield.bf-3 .wheel-core { width: 134px; height: 134px; }
+		.battlefield.bf-2 .wheel-time,
+		.battlefield.bf-3 .wheel-time { font-size: 2.05rem; }
+		.battlefield.bf-2 .wheel-btn,
+		.battlefield.bf-3 .wheel-btn { width: 56px; min-height: 56px; }
 		.wheel-time { font-size: 2.64rem; }
 		.wheel-meta { font-size: .5rem; }
 		.wheel-btn { width: 62px; min-height: 62px; }
