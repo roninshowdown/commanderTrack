@@ -162,11 +162,11 @@
 			{ gridArea: '1 / 1 / 2 / 2', seat: 'tl', upsideDown: true, cmdAngle: 90 },
 			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 270 }
 		],
-		// 3p clockwise: P1 (top-wide) → P2 (bottom-left) → P3 (bottom-right, rotated to face right seat)
+		// 3p clockwise: P1 TL → P2 right(rotated) → P3 BL.  Center column = vertical timer rect.
 		3: [
-			{ gridArea: '1 / 1 / 2 / 3', seat: 'tl', upsideDown: true, cmdAngle: 90 },
-			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 },
-			{ gridArea: '2 / 2 / 3 / 3', seat: 'br', upsideDown: false, cmdAngle: 315, rotate: 'left' }
+			{ gridArea: '1 / 1 / 2 / 2', seat: 'tl', upsideDown: true, cmdAngle: 90 },
+			{ gridArea: '1 / 3 / 3 / 4', seat: 'r', upsideDown: false, cmdAngle: 0, rotate: 'left' },
+			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 270 }
 		],
 		4: [
 			{ gridArea: '1 / 1 / 2 / 2', seat: 'tl', upsideDown: true, cmdAngle: 135 },
@@ -174,11 +174,11 @@
 			{ gridArea: '2 / 2 / 3 / 3', seat: 'br', upsideDown: false, cmdAngle: 315 },
 			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 }
 		],
-		// 5p clockwise: P1 TL → P2 TR → P3 right-vertical (rotated) → P4 BR → P5 BL
+		// 5p clockwise: P1 TL → P2 TR → P3 right(rotated) → P4 BR → P5 BL.  Column 3 = vertical timer rect.
 		5: [
 			{ gridArea: '1 / 1 / 2 / 2', seat: 'tl', upsideDown: true, cmdAngle: 135 },
-			{ gridArea: '1 / 2 / 2 / 3', seat: 'tr', upsideDown: true, cmdAngle: 90 },
-			{ gridArea: '1 / 3 / 3 / 4', seat: 'r', upsideDown: false, cmdAngle: 0, rotate: 'left' },
+			{ gridArea: '1 / 2 / 2 / 3', seat: 'tr', upsideDown: true, cmdAngle: 45 },
+			{ gridArea: '1 / 4 / 3 / 5', seat: 'r', upsideDown: false, cmdAngle: 0, rotate: 'left' },
 			{ gridArea: '2 / 2 / 3 / 3', seat: 'br', upsideDown: false, cmdAngle: 315 },
 			{ gridArea: '2 / 1 / 3 / 2', seat: 'bl', upsideDown: false, cmdAngle: 225 }
 		]
@@ -195,6 +195,13 @@
 
 	function rotationForIndex(idx: number): 'none' | 'left' | 'right' {
 		return getLayout()[idx]?.rotate ?? 'none';
+	}
+
+	/** Grid area for the central vertical timer rectangle (3p/5p only). */
+	function rectGridArea(): string {
+		if (playerCount === 3) return '1 / 2 / 3 / 3';
+		if (playerCount === 5) return '1 / 3 / 3 / 4';
+		return '';
 	}
 
 
@@ -355,6 +362,7 @@
 	);
 	let playerCount = $derived($gameState?.players.length ?? 0);
 	let hasUnifiedLayout = $derived(playerCount >= 2 && playerCount <= 5);
+	let useRect = $derived(playerCount === 3 || playerCount === 5);
 	let hasReactivePlayer = $derived(($gameState?.reactivePlayerIndices ?? []).length > 0);
 	let isCenterPoolDrain = $derived(
 		!!$gameState &&
@@ -740,7 +748,7 @@
 					</div>
 				{/each}
 
-				<div class="wheel-zone">
+				<div class="wheel-zone" class:wheel-zone-rect={useRect} style:grid-area={useRect ? rectGridArea() : null}>
 					{#if showWheel}
 						<!-- wheel-zone kept above overlay for actions -->
 					{/if}
@@ -769,9 +777,9 @@
 							onpointerup={wheelPointerUp}
 							onpointerleave={wheelPointerLeave}>
 							{#if longPressing}
-								<svg class="lp-ring" class:lp-ring-blue={hasReactivePlayer && !$commanderDamageMode} viewBox="0 0 100 100">
-									{#if playerCount === 3 || playerCount === 5}
-										<rect x="4" y="4" width="92" height="92" rx="26" ry="26" />
+								<svg class="lp-ring" class:lp-ring-blue={hasReactivePlayer && !$commanderDamageMode} viewBox="0 0 100 100" preserveAspectRatio={useRect ? 'none' : 'xMidYMid meet'}>
+									{#if useRect}
+										<rect x="4" y="4" width="92" height="92" rx="14" ry="14" vector-effect="non-scaling-stroke" />
 									{:else}
 										<circle cx="50" cy="50" r="46" />
 									{/if}
@@ -917,19 +925,22 @@
 	.game-page{padding-top:var(--space-sm);display:flex;flex-direction:column;gap:var(--space-md);max-width:100%;height:100%}
 	.battlefield{position:relative;display:grid;gap:var(--space-xs);flex:1;min-height:0}
 	.battlefield.bf-2{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
-	.battlefield.bf-3{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+	.battlefield.bf-3{grid-template-columns:1fr 150px 1fr;grid-template-rows:1fr 1fr}
 	.battlefield.bf-4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
-	.battlefield.bf-5{grid-template-columns:1fr 1fr 0.72fr;grid-template-rows:1fr 1fr}
-	/* Smaller wheel for sparser layouts so life/buttons stay visible */
-	.battlefield.bf-2 .wheel-core,
-	.battlefield.bf-3 .wheel-core{width:160px;height:160px;border-width:6px}
-	/* Square rounded-rect wheel for 3p & 5p (preserves readability of player life numbers) */
-	.battlefield.bf-3 .wheel-core,
-	.battlefield.bf-5 .wheel-core{width:220px;height:220px;border-radius:28px;border-width:6px;clip-path:none}
-	.battlefield.bf-2 .wheel-time,
-	.battlefield.bf-3 .wheel-time{font-size:2.7rem}
-	.battlefield.bf-2 .wheel-btn,
-	.battlefield.bf-3 .wheel-btn{width:74px;min-height:74px}
+	.battlefield.bf-5{grid-template-columns:1fr 1fr 150px 0.85fr;grid-template-rows:1fr 1fr}
+	/* Smaller wheel for the simple bf-2 layout */
+	.battlefield.bf-2 .wheel-core{width:160px;height:160px;border-width:6px}
+	.battlefield.bf-2 .wheel-time{font-size:2.7rem}
+	.battlefield.bf-2 .wheel-btn{width:74px;min-height:74px}
+	/* Vertical timer rectangle (3p / 5p): wheel-zone becomes a real grid item */
+	.wheel-zone-rect{position:relative;left:auto;top:auto;transform:none;width:100%;height:100%;display:flex;align-items:stretch;justify-content:center;pointer-events:auto;z-index:34}
+	.wheel-zone-rect .wheel-core{width:100%;height:100%;border-radius:22px;clip-path:none;border-width:5px;flex-direction:column;justify-content:center}
+	.wheel-zone-rect .wheel-time{font-size:2.4rem;writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:.04em;line-height:1}
+	.wheel-zone-rect .wheel-meta{writing-mode:vertical-rl;transform:rotate(180deg);font-size:.66rem;line-height:1}
+	.wheel-zone-rect .wheel-start-text,
+	.wheel-zone-rect .wheel-ceremony-text{writing-mode:vertical-rl;transform:rotate(180deg)}
+	/* lp-ring inside rect: stretch rect as the perimeter */
+	.wheel-zone-rect .lp-ring{transform:none}
 	.slot{min-width:0;min-height:0;position:relative}
 	.slot :global(.tile){height:100%;min-height:unset}
 	.tile-toast{position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:8px;background:rgba(8,8,13,.92);border:2px solid var(--color-warning);color:#fff;padding:6px 10px;border-radius:var(--radius-full);font-size:.72rem;font-weight:800;box-shadow:0 0 16px rgba(255,171,0,.24)}
@@ -1020,14 +1031,13 @@
 		.game-page { padding: 0; gap: 2px; flex: 1; overflow: hidden; }
 		.battlefield { gap: 3px; }
 		.wheel-core { width: 172px; height: 172px; }
-		.battlefield.bf-2 .wheel-core,
-		.battlefield.bf-3 .wheel-core { width: 134px; height: 134px; }
-		.battlefield.bf-3 .wheel-core,
-		.battlefield.bf-5 .wheel-core { width: 170px; height: 170px; border-radius: 24px; }
-		.battlefield.bf-2 .wheel-time,
-		.battlefield.bf-3 .wheel-time { font-size: 2.05rem; }
-		.battlefield.bf-2 .wheel-btn,
-		.battlefield.bf-3 .wheel-btn { width: 56px; min-height: 56px; }
+		.battlefield.bf-2 .wheel-core { width: 134px; height: 134px; }
+		.battlefield.bf-2 .wheel-time { font-size: 2.05rem; }
+		.battlefield.bf-2 .wheel-btn { width: 56px; min-height: 56px; }
+		/* Narrow rectangle column on phones */
+		.battlefield.bf-3 { grid-template-columns: 1fr 110px 1fr; }
+		.battlefield.bf-5 { grid-template-columns: 1fr 1fr 110px 0.85fr; }
+		.wheel-zone-rect .wheel-time { font-size: 1.95rem; }
 		.wheel-time { font-size: 2.64rem; }
 		.wheel-meta { font-size: .5rem; }
 		.wheel-btn { width: 62px; min-height: 62px; }

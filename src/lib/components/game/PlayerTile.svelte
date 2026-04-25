@@ -140,9 +140,18 @@
 	.tile.cmd-mode{cursor:crosshair}
 	.tile.cmd-source{border-color:rgba(255,171,0,.86);box-shadow:0 0 22px rgba(255,171,0,.4)}
 	.tile.upside-down .content{transform:rotate(180deg)}
-	/* Rotate entire tile content for right- or left-seated players so numbers face them */
-	.tile.rotate-left .content{transform:rotate(-90deg)}
-	.tile.rotate-right .content{transform:rotate(90deg)}
+	/* Rotate entire tile content for right- or left-seated players so numbers face them.
+	 * Uses container queries to swap effective width/height so internal flex layout has the
+	 * correct space (otherwise a tall narrow tile would lay out content as if narrow). */
+	.tile.rotate-left,.tile.rotate-right{container-type:size}
+	.tile.rotate-left .content,
+	.tile.rotate-right .content{
+		position:absolute;
+		left:50%;top:50%;
+		width:100cqh;height:100cqw;
+	}
+	.tile.rotate-left .content{transform:translate(-50%,-50%) rotate(-90deg)}
+	.tile.rotate-right .content{transform:translate(-50%,-50%) rotate(90deg)}
 	.tile.rotate-left .bg,.tile.rotate-right .bg{transform:scale(1.04)}
 	.bg{position:absolute;inset:0;background-size:cover;background-position:center top;opacity:.9;z-index:0;transform:scale(1.04);filter:saturate(1.15) contrast(1.06)}
 	.tile::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.34) 46%,rgba(0,0,0,.62));z-index:0}

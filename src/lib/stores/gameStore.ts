@@ -574,7 +574,8 @@ function addLog(
 	const zoneId = get(_activeZoneId) ?? undefined;
 	const now = Date.now();
 
-	// ── Event stacking: merge same-player, same-type, same-direction, same-source within 1000ms
+	// ── Event stacking: merge same-player + same-type + same-source while gaps stay <1s.
+	// Sign-agnostic: signed sum of values. If sum reaches 0 the entry is removed entirely.
 	const pending = _pendingLog;
 	const canMerge =
 		pending &&
@@ -582,21 +583,28 @@ function addLog(
 		pending.entry.playerId === playerId &&
 		pending.entry.type === type &&
 		(pending.entry.sourcePlayerId ?? undefined) === (sourcePlayerId ?? undefined) &&
-		Math.sign(pending.entry.value) === Math.sign(value) &&
 		now - pending.entry.timestamp < 1000;
 
 	if (canMerge && pending) {
 		clearTimeout(pending.timer);
 		pending.entry.value += value;
 		pending.entry.timestamp = now;
-		// Reflect merged value in the in-memory log array (ref equality preserved)
+		if (pending.entry.value === 0) {
+			// Net zero → remove the entry from the visible log and discard the pending buffer
+			const removeId = pending.entry.id;
+			_logEntries.update((e) => e.filter((x) => x.id !== removeId));
+			_pendingLog = null;
+			schedulePersist();
+			return;
+		}
+		// Reflect merged value (in-place mutation; force store update)
 		_logEntries.update((e) => [...e]);
 		pending.timer = setTimeout(() => flushPendingLog(), 1000);
 		schedulePersist();
 		return;
 	}
 
-	// Flush prior pending (different target) before starting a new one
+	// Different target → flush prior pending immediately
 	if (pending) flushPendingLog();
 
 	const entry: LogEntry = { id: uid(), gameId, playerId, playerName, value, type, sourcePlayerId, timestamp: now, zoneId };

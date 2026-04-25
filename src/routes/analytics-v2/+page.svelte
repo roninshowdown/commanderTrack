@@ -125,8 +125,9 @@
 				img.src = url;
 			});
 			const canvas = document.createElement('canvas');
-			// Larger pattern so each slice actually shows recognisable commander art.
-			const SIZE = 220;
+			// Pattern tile size: small enough to repeat (so the whole slice fills)
+			// while still rendering the commander art cleanly.
+			const SIZE = 96;
 			canvas.width = SIZE;
 			canvas.height = SIZE;
 			const ctx = canvas.getContext('2d');
@@ -137,7 +138,7 @@
 			if (ir > 1) { sw = image.height; sx = (image.width - sw) / 2; }
 			else { sh = image.width; sy = (image.height - sh) / 2; }
 			ctx.drawImage(image, sx, sy, sw, sh, 0, 0, SIZE, SIZE);
-			return ctx.createPattern(canvas, 'no-repeat') ?? '#4b4b60';
+			return ctx.createPattern(canvas, 'repeat') ?? '#4b4b60';
 		} catch {
 			return '#4b4b60';
 		}
